@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* We'll add your custom scrollbar here later! */
+/* Premium Glassmorphism Scrollbar */
+.premium-scrollbar::-webkit-scrollbar {
+  width: 5px; /* Extremely thin like iOS */
+}
+
+.premium-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.premium-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  transition: all 0.3s ease;
+}
+
+/* Glows with your brand color when interacting with it */
+.premium-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 45, 136, 0.6); 
+}
