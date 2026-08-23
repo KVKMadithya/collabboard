@@ -4,7 +4,7 @@ import { Send, Bot, User, Loader2 } from 'lucide-react';
 export default function AiAssistant() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Meow! How can I help with your board today?' }
+    { id: 1, sender: 'ai', text: 'Hello! How can I help with your board today?' }
   ]);
   const [isGenerating, setIsGenerating] = useState(false);
 
