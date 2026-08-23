@@ -7,13 +7,14 @@ import Profile from './pages/Profile';
 import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
+import Calendar from './pages/Calendar';
 
 // 👇 1. Import the new Theme Provider Brain
 import { ThemeProvider } from './context/ThemeContext';
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
-    // 👇 2. Replaced hardcoded colors with our global theme variables
+    
     <div className="flex h-screen bg-theme-bg text-theme-text overflow-hidden transition-colors duration-300">
       <Sidebar />
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto custom-scrollbar">
@@ -106,6 +107,7 @@ function App() {
             <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
             <Route path="/notes" element={<Notes user={user} />} />
             <Route path="/ai-assistant" element={<AiAssistant />} />
+            <Route path="/calendar" element={<Calendar />} />
           </Route>
 
         </Routes>
