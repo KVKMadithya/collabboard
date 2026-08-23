@@ -7,7 +7,7 @@ export default function ShareModal({ isOpen, onClose, boardId = '' }) {
   if (!isOpen) return null;
 
   // Dynamically uses current domain (localhost in dev, live domain in production)
-  const shareUrl = `${window.location.origin}/dashboard${boardId ? `?boardId=${boardId}` : ''}`;
+  const shareUrl = `${window.location.origin}${boardId ? `?boardId=${boardId}` : ''}`;
 
   const handleCopy = async () => {
     try {
