@@ -56,15 +56,15 @@ export default function AiAssistant() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0A0B14] text-white p-6">
-      {/* Header */}
-      <div className="flex items-center gap-3 pb-4 border-b border-white/10 mb-4">
-        <Bot className="w-8 h-8 text-[#FF2D88]" />
+    <div className="flex flex-col h-[calc(100vh-140px)] overflow-hidden text-white pr-6 pb-4">
+      {/* AI Header */}
+      <div className="flex items-center gap-3 pb-3 border-b border-white/10 mb-4 flex-shrink-0">
+        <Bot className="w-7 h-7 text-[#FF2D88]" />
         <h1 className="text-xl font-bold">AI Assistant</h1>
       </div>
 
-      {/* Message Feed */}
-      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
+      {/* Scrollable Message List */}
+      <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 min-h-0">
         {messages.map((msg) => (
           <div
             key={msg.id}
@@ -99,8 +99,8 @@ export default function AiAssistant() {
         )}
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSend} className="flex gap-2 bg-[#121629] p-2 rounded-xl border border-white/10">
+      {/* Pinned Input Bar */}
+      <form onSubmit={handleSend} className="flex gap-2 bg-[#121629] p-2 rounded-xl border border-white/10 flex-shrink-0">
         <input
           type="text"
           value={input}
