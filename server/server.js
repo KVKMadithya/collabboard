@@ -12,6 +12,12 @@ const authRoutes = require('./routes/authRoutes');
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes')); // 👈 ADD THIS LINE/
 
+// Import the AI routes
+const aiRoutes = require('./routes/aiRoutes');
+
+// Mount the routes to the /api/ai path
+app.use('/api/ai', aiRoutes);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Successfully connected to CollabBoard MongoDB'))

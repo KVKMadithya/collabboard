@@ -4,14 +4,12 @@ import {
   LayoutDashboard, StickyNote, CheckSquare, Calendar, 
   TrendingUp, Users, GitBranch, Bot, FileText, Settings,
   Share2, Star, LayoutTemplate, CheckCircle2, Search, Pin
-} from 'lucide-react'; // 👈 Added Pin to the imports!
+} from 'lucide-react';
 
 export default function Sidebar() {
-  // 👇 Split state to handle both hovering and pinning independently
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   
-  // The sidebar expands if it is EITHER hovered OR pinned
   const isExpanded = isHovered || isPinned;
 
   const menuItems = [
@@ -22,7 +20,8 @@ export default function Sidebar() {
     { name: 'Progression', icon: <TrendingUp size={20} />, path: '/progression' },
     { name: 'Members', icon: <Users size={20} />, path: '/members' },
     { name: 'Git Repos', icon: <GitBranch size={20} />, path: '/repos' },
-    { name: 'AI Assistant', icon: <Bot size={20} />, path: '/ai' },
+    // 👇 Just updated the path here to match App.jsx
+    { name: 'AI Assistant', icon: <Bot size={20} />, path: '/ai-assistant' }, 
     { name: 'Reports', icon: <FileText size={20} />, path: '/reports' },
     { name: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
@@ -45,7 +44,6 @@ export default function Sidebar() {
       {/* --- Brand Header --- */}
       <div className="p-6 pb-4 flex flex-col gap-6 overflow-hidden">
         
-        {/* 👇 Brand and Pin Button Container */}
         <div className="flex items-center justify-between text-2xl font-bold text-white whitespace-nowrap">
           <div className="flex items-center gap-3">
             <span className="text-[#FF2D88] drop-shadow-[0_0_8px_rgba(255,45,136,0.5)]">📌</span> 
@@ -54,7 +52,6 @@ export default function Sidebar() {
             </span>
           </div>
           
-          {/* 👇 Premium Pin Toggle Button */}
           <button 
             onClick={() => setIsPinned(!isPinned)}
             className={`transition-all duration-300 hover:scale-110 flex-shrink-0 ${

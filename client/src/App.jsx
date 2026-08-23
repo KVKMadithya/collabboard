@@ -5,6 +5,7 @@ import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
 import Notes from './pages/Notes';
+import AiAssistant from './pages/AiAssistant';
 
 // 👇 1. Import the new Theme Provider Brain
 import { ThemeProvider } from './context/ThemeContext';
@@ -103,6 +104,7 @@ function App() {
             <Route path="/board" element={<Placeholder title="Task Board" />} />
             <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
             <Route path="/notes" element={<Notes user={user} />} />
+            <Route path="/ai-assistant" element={<AiAssistant />} />
           </Route>
 
         </Routes>
