@@ -5,6 +5,8 @@ import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
 import Notes from './pages/Notes';
+import Dashboard from './pages/Dashboard';
+import AiAssistant from './pages/AiAssistant';
 
 // 👇 1. Import the new Theme Provider Brain
 import { ThemeProvider } from './context/ThemeContext';
