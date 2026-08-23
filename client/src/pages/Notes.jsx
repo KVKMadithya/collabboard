@@ -33,7 +33,7 @@ export default function Notes({ user }) {
       window.history.replaceState({}, document.title);
     }
   }, [location]);
-  
+
   // Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newNote, setNewNote] = useState({ title: '', content: '', category: 'Note' });
