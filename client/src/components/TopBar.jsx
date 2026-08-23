@@ -30,7 +30,7 @@ export default function TopBar({ user, onSignOut }) {
           <span className="text-[#FF2D88] font-semibold">
             {user ? user.firstName : 'Visitor'}
           </span>{' '}
-          👋
+          
         </h1>
         <p className="text-sm text-theme-muted mt-1.5 font-light transition-colors duration-300">
           {user 
