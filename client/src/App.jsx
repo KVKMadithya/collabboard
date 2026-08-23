@@ -6,9 +6,13 @@ import Auth from './pages/Auth';
 import Profile from './pages/Profile';
 import Notes from './pages/Notes';
 
+// 👇 1. Import the new Theme Provider Brain
+import { ThemeProvider } from './context/ThemeContext';
+
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-[#060813] text-gray-900 dark:text-white overflow-hidden transition-colors duration-300">
+    // 👇 2. Replaced hardcoded colors with our global theme variables
+    <div className="flex h-screen bg-theme-bg text-theme-text overflow-hidden transition-colors duration-300">
       <Sidebar />
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto custom-scrollbar">
         <TopBar 
@@ -24,7 +28,8 @@ const DashboardLayout = ({ user, onSignOut }) => {
 };
 
 const Placeholder = ({ title }) => (
-  <div className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-96 flex items-center justify-center text-gray-500 text-xl transition-colors duration-300">
+  // 👇 Upgraded to theme variables
+  <div className="border-2 border-dashed border-theme-border rounded-xl h-96 flex items-center justify-center text-theme-muted text-xl transition-colors duration-300">
     {title} content will go here
   </div>
 );
@@ -71,34 +76,38 @@ function App() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen w-full bg-gray-50 dark:bg-[#060813] items-center justify-center text-gray-900 dark:text-white font-sans transition-colors duration-300">
+      // 👇 Upgraded loading screen to theme variables
+      <div className="flex h-screen w-full bg-theme-bg items-center justify-center text-theme-text font-sans transition-colors duration-300">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-gray-200 dark:border-white/10 border-t-[#FF2D88] rounded-full animate-spin"></div>
-          <p className="text-gray-500 dark:text-gray-400 text-sm tracking-wide transition-colors duration-300">Loading workspace...</p>
+          <div className="w-10 h-10 border-4 border-theme-border border-t-[#FF2D88] rounded-full animate-spin"></div>
+          <p className="text-theme-muted text-sm tracking-wide transition-colors duration-300">Loading workspace...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        
-        <Route path="/auth" element={
-          user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
-        } />
+    // 👇 3. Wrapped the entire application in the ThemeProvider
+    <ThemeProvider>
+      <BrowserRouter>
+        <Routes>
+          
+          <Route path="/auth" element={
+            user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
+          } />
 
-        <Route element={
-          user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
-        }>
-          <Route path="/" element={<Placeholder title="Dashboard" />} />
-          <Route path="/board" element={<Placeholder title="Task Board" />} />
-          <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
-          <Route path="/notes" element={<Notes user={user} />} />
-        </Route>
+          <Route element={
+            user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
+          }>
+            <Route path="/" element={<Placeholder title="Dashboard" />} />
+            <Route path="/board" element={<Placeholder title="Task Board" />} />
+            <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
+            <Route path="/notes" element={<Notes user={user} />} />
+          </Route>
 
-      </Routes>
-    </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
 

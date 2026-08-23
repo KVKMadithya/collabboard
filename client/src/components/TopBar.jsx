@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { Bell, ChevronDown, LogOut, Sun, Moon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// 👇 Import our global theme brain!
+import { useTheme } from '../context/ThemeContext';
+
 export default function TopBar({ user, onSignOut }) {
   const navigate = useNavigate();
   
-  // 1. Enforce Dark Mode as the default unless explicitly set to light
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = localStorage.getItem('collab_theme');
-    return savedTheme === 'light' ? false : true;
-  });
+  // 👇 Pull the state and toggle function directly from the context
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const [greeting, setGreeting] = useState('Welcome Back');
 
@@ -20,35 +20,19 @@ export default function TopBar({ user, onSignOut }) {
     else setGreeting('Good Evening');
   }, []);
 
-  // 2. Strictly enforce the DOM class
-  useEffect(() => {
-    const html = document.documentElement;
-    if (isDarkMode) {
-      html.classList.add('dark');
-      localStorage.setItem('collab_theme', 'dark');
-    } else {
-      html.classList.remove('dark');
-      localStorage.setItem('collab_theme', 'light');
-    }
-  }, [isDarkMode]);
-
-  const toggleTheme = () => {
-    setIsDarkMode((prevMode) => !prevMode);
-  };
-
   return (
     <header className="flex justify-between items-center mb-10 font-sans tracking-wide transition-colors duration-300">
       
       {/* --- Left Side: Dynamic Greeting --- */}
       <div>
-        <h1 className="text-3xl font-light text-gray-900 dark:text-white flex items-center gap-2 transition-colors duration-300">
+        <h1 className="text-3xl font-light text-theme-text flex items-center gap-2 transition-colors duration-300">
           {greeting},{' '}
           <span className="text-[#FF2D88] font-semibold">
             {user ? user.firstName : 'Visitor'}
           </span>{' '}
           👋
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1.5 font-light transition-colors duration-300">
+        <p className="text-sm text-theme-muted mt-1.5 font-light transition-colors duration-300">
           {user 
             ? 'You have 3 Notes Updated Since Yesterday' 
             : 'Viewing in read-only mode. Please sign in to make edits.'}
@@ -61,7 +45,7 @@ export default function TopBar({ user, onSignOut }) {
         {/* Theme Toggle Button */}
         <button 
           onClick={toggleTheme}
-          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-[#121629] p-2.5 rounded-full border border-gray-200 dark:border-white/5 transition-all duration-500 hover:scale-110 hover:shadow-[0_0_15px_rgba(255,45,136,0.1)] active:rotate-90"
+          className="text-theme-muted hover:text-theme-text bg-theme-panel p-2.5 rounded-full border border-theme-border transition-all duration-500 hover:scale-110 hover:shadow-[0_0_15px_rgba(255,45,136,0.1)] active:rotate-90"
           title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -78,25 +62,25 @@ export default function TopBar({ user, onSignOut }) {
         )}
         
         {/* Notification Bell */}
-        <button className="relative text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-all hover:scale-110 ml-2">
+        <button className="relative text-theme-muted hover:text-theme-text transition-all hover:scale-110 ml-2">
           <Bell size={22} />
           {user && (
-            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#FF2D88] border-2 border-white dark:border-[#060813] rounded-full shadow-[0_0_8px_rgba(255,45,136,0.8)] transition-colors duration-300"></span>
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#FF2D88] border-2 border-theme-bg rounded-full shadow-[0_0_8px_rgba(255,45,136,0.8)] transition-colors duration-300"></span>
           )}
         </button>
 
         {/* --- Authentication State Toggle --- */}
-        <div className="flex items-center pl-6 border-l border-gray-200 dark:border-white/10 ml-2 transition-colors duration-300">
+        <div className="flex items-center pl-6 border-l border-theme-border ml-2 transition-colors duration-300">
           {user ? (
             <div className="flex items-center gap-3">
               
               {/* Clickable Profile Section */}
               <div 
-                className="flex items-center gap-3 cursor-pointer hover:bg-gray-100 dark:hover:bg-white/5 p-2 rounded-xl transition-all hover:scale-[1.02]"
+                className="flex items-center gap-3 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-xl transition-all hover:scale-[1.02]"
                 onClick={() => navigate('/profile')}
                 title="Go to User Profile"
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B28CC] to-[#FF2D88] flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-transparent hover:ring-gray-300 dark:hover:ring-white/20 transition-all overflow-hidden">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B28CC] to-[#FF2D88] flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-transparent hover:ring-theme-muted transition-all overflow-hidden">
                   {user.profilePic ? (
                     <img src={user.profilePic} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -104,7 +88,7 @@ export default function TopBar({ user, onSignOut }) {
                   )}
                 </div>
                 <div className="text-sm hidden sm:block">
-                  <p className="text-gray-900 dark:text-white font-medium tracking-wide transition-colors duration-300">{user.firstName} {user.lastName}</p>
+                  <p className="text-theme-text font-medium tracking-wide transition-colors duration-300">{user.firstName} {user.lastName}</p>
                   <p className="text-[#00FF66] text-xs font-light mt-0.5 flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] animate-pulse"></span> Online
                   </p>
@@ -114,7 +98,7 @@ export default function TopBar({ user, onSignOut }) {
               {/* Dedicated Sign Out Button */}
               <button 
                 onClick={onSignOut}
-                className="text-gray-500 hover:text-[#FF2D88] p-2 rounded-xl hover:bg-[#FF2D88]/10 transition-all ml-1 group"
+                className="text-theme-muted hover:text-[#FF2D88] p-2 rounded-xl hover:bg-[#FF2D88]/10 transition-all ml-1 group"
                 title="Sign Out"
               >
                 <LogOut size={18} className="group-hover:translate-x-0.5 transition-transform" />
@@ -124,7 +108,7 @@ export default function TopBar({ user, onSignOut }) {
           ) : (
             <button 
               onClick={() => navigate('/auth')}
-              className="bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white px-7 py-2.5 rounded-xl text-sm font-medium transition-all"
+              className="bg-theme-panel border border-theme-border hover:border-[#FF2D88]/50 text-theme-text px-7 py-2.5 rounded-xl text-sm font-medium transition-all"
             >
               Sign In
             </button>
