@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom';
 export default function TopBar({ user, onSignOut }) {
   const navigate = useNavigate();
   
-  // Initialize state by checking if 'dark' is currently on the HTML document
-  const [isDarkMode, setIsDarkMode] = useState(
-    document.documentElement.classList.contains('dark') || true
-  );
+  // 1. Enforce Dark Mode as the default unless explicitly set to light
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('collab_theme');
+    return savedTheme === 'light' ? false : true;
+  });
+
   const [greeting, setGreeting] = useState('Welcome Back');
 
   useEffect(() => {
@@ -16,16 +18,22 @@ export default function TopBar({ user, onSignOut }) {
     if (hour < 12) setGreeting('Good Morning');
     else if (hour < 18) setGreeting('Good Afternoon');
     else setGreeting('Good Evening');
+  }, []);
 
-    // Ensure the app boots up in dark mode by default to match your design
-    if (!document.documentElement.classList.contains('dark') && isDarkMode) {
-      document.documentElement.classList.add('dark');
+  // 2. Strictly enforce the DOM class
+  useEffect(() => {
+    const html = document.documentElement;
+    if (isDarkMode) {
+      html.classList.add('dark');
+      localStorage.setItem('collab_theme', 'dark');
+    } else {
+      html.classList.remove('dark');
+      localStorage.setItem('collab_theme', 'light');
     }
   }, [isDarkMode]);
 
   const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark'); 
+    setIsDarkMode((prevMode) => !prevMode);
   };
 
   return (
@@ -53,7 +61,7 @@ export default function TopBar({ user, onSignOut }) {
         {/* Theme Toggle Button */}
         <button 
           onClick={toggleTheme}
-          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-[#121629] p-2.5 rounded-full border border-gray-200 dark:border-white/5 transition-all duration-500 hover:scale-110 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] active:rotate-90"
+          className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-[#121629] p-2.5 rounded-full border border-gray-200 dark:border-white/5 transition-all duration-500 hover:scale-110 hover:shadow-[0_0_15px_rgba(255,45,136,0.1)] active:rotate-90"
           title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -61,7 +69,10 @@ export default function TopBar({ user, onSignOut }) {
 
         {/* Action Button */}
         {user && (
-          <button className="bg-gradient-to-r from-[#FF2D88] to-[#FF7A00] text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 hover:opacity-90 hover:-translate-y-0.5 transition-all shadow-lg shadow-[#FF2D88]/20 ml-2">
+          <button 
+            onClick={() => navigate('/notes', { state: { openModal: true } })}
+            className="bg-gradient-to-r from-[#FF2D88] to-[#FF7A00] text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 hover:opacity-90 hover:-translate-y-0.5 transition-all shadow-lg shadow-[#FF2D88]/20 ml-2"
+          >
             <span>+</span> New notes <ChevronDown size={16} />
           </button>
         )}
@@ -85,7 +96,6 @@ export default function TopBar({ user, onSignOut }) {
                 onClick={() => navigate('/profile')}
                 title="Go to User Profile"
               >
-                {/* 👇 FIX: Dynamic Avatar now fully supports images! */}
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B28CC] to-[#FF2D88] flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-transparent hover:ring-gray-300 dark:hover:ring-white/20 transition-all overflow-hidden">
                   {user.profilePic ? (
                     <img src={user.profilePic} alt="Profile" className="w-full h-full object-cover" />

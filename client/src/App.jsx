@@ -4,10 +4,10 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
+import Notes from './pages/Notes';
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
-    // 👇 Added light mode background (bg-gray-50) and text colors, plus smooth transitions
     <div className="flex h-screen bg-gray-50 dark:bg-[#060813] text-gray-900 dark:text-white overflow-hidden transition-colors duration-300">
       <Sidebar />
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto custom-scrollbar">
@@ -24,7 +24,6 @@ const DashboardLayout = ({ user, onSignOut }) => {
 };
 
 const Placeholder = ({ title }) => (
-  // 👇 Added light mode borders and text colors
   <div className="border-2 border-dashed border-gray-300 dark:border-white/10 rounded-xl h-96 flex items-center justify-center text-gray-500 text-xl transition-colors duration-300">
     {title} content will go here
   </div>
@@ -72,7 +71,6 @@ function App() {
 
   if (isLoading) {
     return (
-      // 👇 Updated the loading screen to respect light/dark mode
       <div className="flex h-screen w-full bg-gray-50 dark:bg-[#060813] items-center justify-center text-gray-900 dark:text-white font-sans transition-colors duration-300">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-gray-200 dark:border-white/10 border-t-[#FF2D88] rounded-full animate-spin"></div>
@@ -96,6 +94,7 @@ function App() {
           <Route path="/" element={<Placeholder title="Dashboard" />} />
           <Route path="/board" element={<Placeholder title="Task Board" />} />
           <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
+          <Route path="/notes" element={<Notes user={user} />} />
         </Route>
 
       </Routes>

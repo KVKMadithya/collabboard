@@ -1,9 +1,35 @@
 @import "tailwindcss";
 
-/* We'll add your custom scrollbar here later! */
-/* Premium Glassmorphism Scrollbar */
+/* 👇 Tells Tailwind v4 to generate your custom theme classes */
+@theme {
+  --color-theme-bg: var(--color-bg-main);
+  --color-theme-panel: var(--color-bg-panel);
+  --color-theme-text: var(--color-text-main);
+  --color-theme-muted: var(--color-text-muted);
+  --color-theme-border: var(--color-border);
+}
+
+/* ☀️ LIGHT MODE VARIABLES */
+:root {
+  --color-bg-main: #f8fafc;
+  --color-bg-panel: #ffffff;
+  --color-text-main: #111827;
+  --color-text-muted: #6b7280;
+  --color-border: #e2e8f0;
+}
+
+/* 🌙 DARK MODE VARIABLES (YOUR DEFAULT) */
+.dark {
+  --color-bg-main: #060813;
+  --color-bg-panel: #121629;
+  --color-text-main: #ffffff;
+  --color-text-muted: #9ca3af;
+  --color-border: rgba(255, 255, 255, 0.05);
+}
+
+/* --- Premium Glassmorphism Scrollbar --- */
 .premium-scrollbar::-webkit-scrollbar {
-  width: 5px; /* Extremely thin like iOS */
+  width: 5px;
 }
 
 .premium-scrollbar::-webkit-scrollbar-track {
@@ -16,7 +42,6 @@
   transition: all 0.3s ease;
 }
 
-/* Glows with your brand color when interacting with it */
 .premium-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: rgba(255, 45, 136, 0.6); 
 }
