@@ -2,20 +2,25 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path'); // 👈 Added the path module for directory routing
 
 const app = express();
 app.use(cors());
+
 // Increase the payload limit to 10 megabytes to allow for high-res profile pictures
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-const authRoutes = require('./routes/authRoutes');
+
+// 👈 ADDED THIS: Makes the 'uploads' folder publicly accessible via URL for your frontend attachments
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Mount standard routes
 app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/notes', require('./routes/noteRoutes')); // 👈 ADD THIS LINE/
+app.use('/api/notes', require('./routes/noteRoutes'));
+app.use('/api/tasks', require('./routes/taskRoutes'));
 
-// Import the AI routes
+// Import and mount the AI routes
 const aiRoutes = require('./routes/aiRoutes');
-
-// Mount the routes to the /api/ai path
 app.use('/api/ai', aiRoutes);
 
 // Connect to MongoDB

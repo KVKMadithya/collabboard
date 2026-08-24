@@ -8,13 +8,19 @@ import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
+import Tasks from './pages/Tasks';
+import Members from './pages/Members'; 
 
-// 👇 1. Import the new Theme Provider Brain
+// 👇 New Imports for the 3-Page Task Architecture
+import TaskForm from './pages/TaskForm';
+import TaskDetail from './pages/TaskDetail';
+import Timeline from './pages/Timeline';
+
+// 👇 Import the new Theme Provider Brain
 import { ThemeProvider } from './context/ThemeContext';
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
-    
     <div className="flex h-screen bg-theme-bg text-theme-text overflow-hidden transition-colors duration-300">
       <Sidebar />
       <main className="flex-1 flex flex-col px-10 py-8 overflow-y-auto custom-scrollbar">
@@ -22,9 +28,9 @@ const DashboardLayout = ({ user, onSignOut }) => {
           user={user} 
           onSignOut={onSignOut}
         />
-        <div className="flex-1">
-          <Outlet />
-        </div>
+        <div className="flex-1 flex flex-col min-h-0">
+  <Outlet />
+</div>
       </main>
     </div>
   );
@@ -90,7 +96,7 @@ function App() {
   }
 
   return (
-    // 👇 3. Wrapped the entire application in the ThemeProvider
+    // 👇 Wrapped the entire application in the ThemeProvider
     <ThemeProvider>
       <BrowserRouter>
         <Routes>
@@ -103,11 +109,19 @@ function App() {
             user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
           }>
             <Route path="/" element={<Dashboard />} />
-            <Route path="/board" element={<Placeholder title="Task Board" />} />
+            
+            {/* 👇 Core Task & Project Management Routes */}
+            <Route path="/board" element={<Tasks />} />
+            <Route path="/tasks/new" element={<TaskForm />} />
+            <Route path="/tasks/:id" element={<TaskDetail />} />
+            <Route path="/timeline" element={<Timeline />} />
+
+            {/* 👇 Other App Features */}
             <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
             <Route path="/notes" element={<Notes user={user} />} />
             <Route path="/ai-assistant" element={<AiAssistant />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/members" element={<Members />} /> {/* <-- ADD THIS */}
           </Route>
 
         </Routes>
