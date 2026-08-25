@@ -74,7 +74,8 @@ export default function Profile({ user, toggleRefresh }) {
   if (!user) return null;
 
   return (
-    <div className="h-full w-full max-w-7xl mx-auto flex flex-col font-sans">
+    // FIX: Removed 'h-full' and added 'pb-10'. This allows the component to grow naturally and scroll!
+    <div className="w-full max-w-7xl mx-auto flex flex-col font-sans pb-10">
       
       {/* --- Edit Profile Modal --- */}
       {isEditing && (

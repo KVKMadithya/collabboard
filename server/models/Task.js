@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true }, // 👈 NEW: Locks this task to a specific project
   title: { type: String, required: true },
   description: { type: String },
   status: { 
@@ -24,6 +25,7 @@ const taskSchema = new mongoose.Schema({
     path: String
   }],
   assignees: [{
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // 👈 NEW: Links assignee to a real database user
     name: String,
     initials: String
   }],

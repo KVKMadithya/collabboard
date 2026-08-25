@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const memberController = require('../controllers/memberController');
-// const authMiddleware = require('../middleware/authMiddleware'); // Uncomment and add your auth middleware if you have one
+const { protect } = require('../middleware/authMiddleware');
 
-router.get('/', memberController.getMembers);
-router.get('/search', memberController.searchUsers);
-// Replace `(req, res, next) => { req.user = { id: "YOUR_MOCK_USER_ID" }; next(); }` with your actual auth middleware
-router.post('/invite', (req, res, next) => { req.user = { id: "64a7c..." }; next(); }, memberController.sendInvite);
+router.get('/', protect, memberController.getMembers);
+router.get('/search', protect, memberController.searchUsers);
+router.post('/invite', protect, memberController.sendInvite);
+router.get('/notifications', protect, memberController.getNotifications);
+router.put('/notifications/:id/respond', protect, memberController.respondToInvite);
+router.put('/role', protect, memberController.updateMemberRole);
 
 module.exports = router;

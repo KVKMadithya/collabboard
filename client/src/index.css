@@ -27,7 +27,26 @@
   --color-border: rgba(255, 255, 255, 0.05);
 }
 
-/* --- Premium Glassmorphism Scrollbar --- */
+/* --- GLOBAL GLASSMORPHIC SCROLLBAR (Applies everywhere automatically) --- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 45, 136, 0.5); /* Brand Neon Pink on Hover */
+}
+
+/* --- Premium Glassmorphism Scrollbar (For ultra-thin specific containers) --- */
 .premium-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
@@ -44,4 +63,13 @@
 
 .premium-scrollbar:hover::-webkit-scrollbar-thumb {
   background-color: rgba(255, 45, 136, 0.6); 
+}
+
+/* --- Hide scrollbar completely but allow scrolling --- */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
