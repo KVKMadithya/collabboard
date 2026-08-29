@@ -13,6 +13,7 @@ import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
 import GitFeed from './pages/GitFeed'; 
 import SearchList from './pages/SearchList';
+import Settings from './pages/Settings';
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -121,6 +122,7 @@ function App() {
               <Route path="/members" element={<Members />} /> 
               <Route path="/git" element={<GitFeed user={user} />} />
               <Route path="/search" element={<SearchList />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
 
           </Routes>
