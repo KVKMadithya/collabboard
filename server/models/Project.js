@@ -4,12 +4,17 @@ const projectSchema = new mongoose.Schema({
   name: { 
     type: String, 
     required: true, 
-    unique: true, // 👈 Enforces that no two projects can have the same name
+    unique: true, // Enforces that no two projects can have the same name
     trim: true 
   },
   description: { 
     type: String,
     default: ''
+  },
+  // 🛑 NEW: Stores the 'owner/repo' string for the GitHub API bridge
+  githubRepo: {
+    type: String,
+    default: null
   },
   leader: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -24,7 +29,7 @@ const projectSchema = new mongoose.Schema({
     },
     role: { 
       type: String, 
-      enum: [ // 👈 Strict technical roles. The DB will reject any dummy values.
+      enum: [ 
         'Fullstack/Leader', 
         'Frontend Developer', 
         'Backend Developer', 

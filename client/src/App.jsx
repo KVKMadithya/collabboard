@@ -4,13 +4,14 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
-import ViewProfile from './pages/ViewProfile'; // 👈 NEW: Imported the public profile viewer
+import ViewProfile from './pages/ViewProfile'; 
 import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
+import GitFeed from './pages/GitFeed'; // 👈 NEW: Imported the GitFeed page
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -112,11 +113,12 @@ function App() {
 
               {/* Other App Features */}
               <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
-              <Route path="/user/:id" element={<ViewProfile />} /> {/* 👈 NEW: Added public profile routing */}
+              <Route path="/user/:id" element={<ViewProfile />} /> 
               <Route path="/notes" element={<Notes user={user} />} />
               <Route path="/ai-assistant" element={<AiAssistant />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/members" element={<Members />} /> 
+              <Route path="/git" element={<GitFeed user={user} />} /> {/* 👈 NEW: Added the GitFeed route */}
             </Route>
 
           </Routes>

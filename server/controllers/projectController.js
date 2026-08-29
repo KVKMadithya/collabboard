@@ -28,7 +28,6 @@ exports.createProject = async (req, res) => {
 
     const savedProject = await newProject.save();
 
-    // Notice we are pulling 'university' now to display on the profile cards
     const populatedProject = await Project.findById(savedProject._id)
       .populate('leader', 'name email profilePic university')
       .populate('members.user', 'name email profilePic university');
@@ -94,5 +93,48 @@ exports.checkProjectName = async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ message: "Failed to validate project name.", error: error.message });
+  }
+};
+
+// 5. UPDATE GITHUB REPOSITORY LINK (LEADER ONLY)
+exports.updateGithubRepo = async (req, res) => {
+  try {
+    const { githubRepo } = req.body;
+    const projectId = req.params.id;
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ message: "Project not found." });
+    }
+
+    // Security Check: Only the project leader can link a repository
+    if (project.leader.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: "Access denied. Only the Team Leader can link a repository." });
+    }
+
+    // Smart Parser: Handle full URLs or raw 'owner/repo' strings
+    let parsedRepo = githubRepo;
+    if (githubRepo && githubRepo.includes('github.com')) {
+      try {
+        const url = new URL(githubRepo);
+        parsedRepo = url.pathname.substring(1); // Removes the leading '/'
+        if (parsedRepo.endsWith('.git')) {
+          parsedRepo = parsedRepo.slice(0, -4); // Removes '.git' if present
+        }
+      } catch (err) {
+        return res.status(400).json({ message: "Invalid GitHub URL." });
+      }
+    }
+
+    project.githubRepo = parsedRepo || null;
+    await project.save();
+
+    res.status(200).json({ 
+      message: "GitHub repository updated successfully!", 
+      githubRepo: project.githubRepo 
+    });
+  } catch (error) {
+    console.error("GitHub Repo Update Error:", error);
+    res.status(500).json({ message: "Failed to update repository.", error: error.message });
   }
 };

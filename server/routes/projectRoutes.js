@@ -17,4 +17,6 @@ router.post('/', protect, projectController.createProject);
 // 4. Get a specific project by ID
 router.get('/:id', protect, projectController.getProjectById);
 
+router.put('/:id/github', protect, projectController.updateGithubRepo);
+
 module.exports = router;
