@@ -8,7 +8,6 @@ exports.getMembers = async (req, res) => {
     const { projectId } = req.query;
     if (!projectId) return res.status(400).json({ message: "Project ID is required." });
 
-    // 🛑 FIX: Populate firstName and lastName
     const project = await Project.findById(projectId).populate('members.user', 'firstName lastName email profilePic university');
     if (!project) return res.status(404).json({ message: "Project not found." });
 
@@ -18,7 +17,7 @@ exports.getMembers = async (req, res) => {
       
       return {
         _id: m.user._id,
-        name: fullName, // React expects 'name'
+        name: fullName, 
         email: m.user.email,
         profilePic: m.user.profilePic,
         university: m.user.university, 
@@ -39,7 +38,6 @@ exports.searchUsers = async (req, res) => {
     const { q } = req.query;
     if (!q) return res.status(200).json([]);
 
-    // 🛑 FIX: Search firstName and lastName instead of 'name'
     const users = await User.find({
       $or: [
         { email: { $regex: q, $options: 'i' } },
@@ -92,17 +90,20 @@ exports.sendInvite = async (req, res) => {
       return res.status(400).json({ message: "An invite is already pending for this user." });
     }
 
+    // 🛑 FIX: Added the required 'message' string
     const invite = new Notification({
       recipient: recipientId,
       sender: req.user.id,
       project: projectId,
       type: 'invite',
-      roleOffered
+      roleOffered,
+      message: 'invited you to join their workspace.' 
     });
 
     await invite.save();
     res.status(201).json({ message: "Invite sent successfully!", invite });
   } catch (error) {
+    console.error("Invite Error:", error);
     res.status(500).json({ message: "Failed to send invite", error: error.message });
   }
 };
@@ -110,7 +111,6 @@ exports.sendInvite = async (req, res) => {
 // 4. FETCH NOTIFICATIONS
 exports.getNotifications = async (req, res) => {
   try {
-    // 🛑 FIX: Populate firstName and lastName for the notification sender
     const notifications = await Notification.find({ recipient: req.user.id })
       .populate('sender', 'firstName lastName profilePic')
       .populate('project', 'name')
@@ -143,7 +143,8 @@ exports.respondToInvite = async (req, res) => {
     }
 
     notification.status = action === 'accept' ? 'accepted' : 'declined';
-    notification.read = true;
+    // 🛑 FIX: Updated to match the new schema's 'isRead' field
+    notification.isRead = true; 
     await notification.save();
 
     if (action === 'accept') {
@@ -204,17 +205,14 @@ exports.removeMember = async (req, res) => {
     const project = await Project.findById(projectId);
     if (!project) return res.status(404).json({ message: "Project not found." });
 
-    // Only leader can remove members
     if (project.leader.toString() !== req.user.id) {
       return res.status(403).json({ message: "Access denied. Only the project leader can remove members." });
     }
 
-    // Cannot remove the leader
     if (project.leader.toString() === memberId) {
       return res.status(400).json({ message: "You cannot remove the project leader." });
     }
 
-    // Filter out the member
     project.members = project.members.filter(m => m.user.toString() !== memberId);
     await project.save();
 
