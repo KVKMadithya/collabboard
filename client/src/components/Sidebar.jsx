@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { useState, useRef } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, StickyNote, CheckSquare, Calendar, 
   TrendingUp, Users, GitBranch, Bot, FileText, Settings,
@@ -10,7 +10,13 @@ import ShareModal from './ShareModal';
 export default function Sidebar() {
   const [isHovered, setIsHovered] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
-  const [isShareOpen, setIsShareOpen] = useState(false); // Modal State
+  const [isShareOpen, setIsShareOpen] = useState(false); 
+  
+  // 🛑 UPDATED: Search State, Ref, and Navigation Hooks
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef(null);
+  const navigate = useNavigate();
+  const location = useLocation(); // Needed to check if we are already on the search page
   
   const isExpanded = isHovered || isPinned;
 
@@ -21,7 +27,6 @@ export default function Sidebar() {
     { name: 'Calendar', icon: <Calendar size={20} />, path: '/calendar' },
     { name: 'Progression', icon: <TrendingUp size={20} />, path: '/progression' },
     { name: 'Members', icon: <Users size={20} />, path: '/members' },
-    // 🛑 FIX: Updated path to match the new GitFeed route
     { name: 'Git Feed', icon: <GitBranch size={20} />, path: '/git' }, 
     { name: 'AI Assistant', icon: <Bot size={20} />, path: '/ai-assistant' }, 
     { name: 'Reports', icon: <FileText size={20} />, path: '/reports' },
@@ -36,8 +41,31 @@ export default function Sidebar() {
 
   const handleFavoriteClick = (e, item) => {
     if (item.isAction) {
-      e.preventDefault(); // Prevents route navigation
-      setIsShareOpen(true); // Triggers Share Modal
+      e.preventDefault(); 
+      setIsShareOpen(true); 
+    }
+  };
+
+  // 🛑 NEW: True Live Search Logic
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    
+    // Instantly navigate as they type!
+    if (value.trim()) {
+      navigate(`/search?q=${encodeURIComponent(value.trim())}`);
+    } else if (location.pathname === '/search') {
+      // If they backspace and clear the input entirely, return to dashboard
+      navigate('/'); 
+    }
+  };
+
+  const handleSearchIconClick = () => {
+    if (!isExpanded) {
+      setIsHovered(true);
+      setTimeout(() => searchInputRef.current?.focus(), 300);
+    } else {
+      searchInputRef.current?.focus();
     }
   };
 
@@ -46,7 +74,6 @@ export default function Sidebar() {
       <aside 
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        // 🛑 THEME FIX: Using theme-panel and theme-border
         className={`fixed lg:relative z-40 h-screen bg-theme-panel/95 backdrop-blur-2xl border-r border-theme-border flex flex-col text-theme-text font-sans transition-all duration-400 ease-in-out ${
           isExpanded ? 'w-64' : 'w-[84px]'
         }`}
@@ -77,14 +104,22 @@ export default function Sidebar() {
             </button>
           </div>
           
-          {/* Search Bar */}
-          <div className={`bg-theme-bg rounded-xl flex items-center border border-theme-border transition-all duration-300 ${
-            isExpanded ? 'p-2.5 px-3 shadow-inner' : 'p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer justify-center'
-          }`}>
+          {/* 🛑 UPDATED: Search Bar completely overhauled for Live Search */}
+          <div 
+            onClick={handleSearchIconClick}
+            className={`bg-theme-bg rounded-xl flex items-center border border-theme-border transition-all duration-300 ${
+              isExpanded ? 'p-2.5 px-3 shadow-inner' : 'p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer justify-center'
+            }`}
+          >
             <Search size={18} className="text-theme-muted flex-shrink-0" />
             <input 
-              type="text" 
-              placeholder="Search..." 
+              ref={searchInputRef}
+              type="search"          /* Gives a nice 'x' to clear the input on most browsers */
+              autoComplete="off"     /* Completely disables the annoying browser dropdown */
+              spellCheck="false"
+              value={searchQuery}
+              onChange={handleSearchChange} 
+              placeholder="Search workspaces..." 
               className={`bg-transparent border-none outline-none text-sm text-theme-text placeholder-theme-muted transition-all duration-300 ${
                 isExpanded ? 'w-full ml-3 opacity-100' : 'w-0 ml-0 opacity-0'
               }`}

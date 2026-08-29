@@ -11,7 +11,8 @@ import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
-import GitFeed from './pages/GitFeed'; // 👈 NEW: Imported the GitFeed page
+import GitFeed from './pages/GitFeed'; 
+import SearchList from './pages/SearchList';
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -118,7 +119,8 @@ function App() {
               <Route path="/ai-assistant" element={<AiAssistant />} />
               <Route path="/calendar" element={<Calendar />} />
               <Route path="/members" element={<Members />} /> 
-              <Route path="/git" element={<GitFeed user={user} />} /> {/* 👈 NEW: Added the GitFeed route */}
+              <Route path="/git" element={<GitFeed user={user} />} />
+              <Route path="/search" element={<SearchList />} />
             </Route>
 
           </Routes>

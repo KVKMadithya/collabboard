@@ -22,6 +22,7 @@ app.use('/api/projects', require('./routes/projectRoutes'));
 app.use('/api/members', require('./routes/memberRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/github', require('./routes/githubRoutes'));
+app.use('/api/search', require('./routes/searchRoutes'));
 
 // Import and mount the AI routes
 const aiRoutes = require('./routes/aiRoutes');
