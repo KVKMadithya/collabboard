@@ -2,11 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, GitCommit, Plus, ArrowLeft, ArrowRight, 
-  Loader2, AlertCircle, User, ArrowUpDown, Check
+  Loader2, AlertCircle, User, ArrowUpDown, Check, Briefcase, Calendar, Save, X, Edit2
 } from 'lucide-react';
+import { useProject } from '../context/ProjectContext'; // 👈 Global Brain Integration
 
 export default function Timeline() {
   const navigate = useNavigate();
+  const { activeProject } = useProject(); // 👈 Pulls the active workspace
+
+  // --- STATE ---
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -16,17 +20,32 @@ export default function Timeline() {
   const [sortBy, setSortBy] = useState('newest');
   const [filterAssignee, setFilterAssignee] = useState('all');
 
+  // --- INLINE EDIT STATE ---
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editDates, setEditDates] = useState({ startDate: '', dueDate: '' });
+  const [isUpdating, setIsUpdating] = useState(false);
+
   // --- TIMELINE DATE STATE ---
-  // Using August 2026 based on your current environment timeline
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 7, 1)); 
+  const [currentDate, setCurrentDate] = useState(new Date()); 
 
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    if (activeProject) {
+      fetchTasks();
+    } else {
+      setTasks([]);
+      setIsLoading(false);
+    }
+  }, [activeProject]);
 
   const fetchTasks = async () => {
+    setIsLoading(true);
+    setError(null);
     try {
-      const response = await fetch('http://localhost:5000/api/tasks');
+      const token = localStorage.getItem('collab_token');
+      // 🛑 STRICT SANDBOXING: Fetch ONLY tasks tied to the active project
+      const response = await fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (!response.ok) throw new Error('Failed to fetch tasks from server');
       const data = await response.json();
       setTasks(data || []);
@@ -34,6 +53,42 @@ export default function Timeline() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- INLINE DATE UPDATE LOGIC ---
+  const handleUpdateDates = async (taskId) => {
+    if (editDates.startDate && editDates.dueDate && new Date(editDates.startDate) > new Date(editDates.dueDate)) {
+      alert("Start Date cannot be later than Due Date.");
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const token = localStorage.getItem('collab_token');
+      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ 
+          startDate: editDates.startDate || null, 
+          dueDate: editDates.dueDate || null 
+        })
+      });
+
+      if (!response.ok) throw new Error('Failed to update task dates');
+      
+      const updatedTask = await response.json();
+      
+      // Instantly update the local state so the timeline bar snaps to the new position
+      setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
+      setEditingTaskId(null);
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -57,7 +112,15 @@ export default function Timeline() {
       if (filterAssignee === 'unassigned') return !task.assignees || task.assignees.length === 0;
       return task.assignees?.some(a => a.name === filterAssignee);
     })
-    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0)); // Timeline naturally looks best sorted old-to-new
+    .sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.createdAt || Date.now()) - new Date(a.createdAt || Date.now());
+      if (sortBy === 'oldest') return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      if (sortBy === 'priority') {
+        const p = { 'High': 3, 'Medium': 2, 'Low': 1 };
+        return (p[b.priority] || 0) - (p[a.priority] || 0);
+      }
+      return 0;
+    });
 
   // --- STATUS COLORS ---
   const statusColors = {
@@ -76,13 +139,15 @@ export default function Timeline() {
     const eDate = task.dueDate ? new Date(task.dueDate) : null;
 
     if (sDate) {
-      if (sDate.getMonth() === currentDate.getMonth()) start = sDate.getDate();
+      if (sDate.getMonth() === currentDate.getMonth() && sDate.getFullYear() === currentDate.getFullYear()) start = sDate.getDate();
       else if (sDate < currentDate) start = 1;
+      else if (sDate > currentDate) return { display: 'none' }; // Task hasn't started in this month view yet
     }
 
     if (eDate) {
-      if (eDate.getMonth() === currentDate.getMonth()) end = eDate.getDate() + 1; // +1 because CSS grid lines end *after* the cell
+      if (eDate.getMonth() === currentDate.getMonth() && eDate.getFullYear() === currentDate.getFullYear()) end = eDate.getDate() + 1; 
       else if (eDate > currentDate) end = daysInMonth + 1;
+      else if (eDate < currentDate) return { display: 'none' }; // Task was due before this month
     } else {
       end = start + 3; // Give it an arbitrary 3-day width if no due date is set
       if (end > daysInMonth + 1) end = daysInMonth + 1;
@@ -90,6 +155,29 @@ export default function Timeline() {
 
     return { gridColumn: `${start} / ${end}` };
   };
+
+  // --- RENDER 1: NO PROJECT SELECTED ---
+  if (!activeProject && !isLoading) {
+    return (
+      <div className="flex-1 w-full flex items-center justify-center animate-fade-in p-8">
+        <div className="max-w-md w-full bg-white dark:bg-[#121629] p-8 rounded-[2rem] border border-gray-200 dark:border-white/10 shadow-2xl text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-700 dark:to-gray-800 rounded-full mx-auto flex items-center justify-center mb-6 shadow-lg">
+            <Briefcase size={32} className="text-gray-500 dark:text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">No Workspace Active</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+            Please select a project from the top menu or create a new workspace to view the timeline.
+          </p>
+          <button 
+            onClick={() => navigate('/members')}
+            className="w-full bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] hover:opacity-90 text-white py-3.5 rounded-xl text-sm font-bold transition-all shadow-[0_4px_14px_rgba(255,45,136,0.3)]"
+          >
+            Go to Workspaces
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -100,21 +188,33 @@ export default function Timeline() {
   }
 
   return (
-    <div className="p-8 w-full h-[calc(100vh-80px)] flex flex-col animate-fade-in text-gray-900 dark:text-white" onClick={() => setActiveDropdown(null)}>
+    <div className="flex flex-col h-[calc(100vh-120px)] w-full max-w-7xl mx-auto animate-fade-in" onClick={() => setActiveDropdown(null)}>
       
-      {/* HEADER SECTION (Matches Tasks.jsx perfectly) */}
+      <style dangerouslySetInnerHTML={{__html: `
+        .glass-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .glass-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
+        .glass-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 10px; }
+        .glass-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 45, 136, 0.5); }
+      `}} />
+
+      {/* HEADER SECTION */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 flex-shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">Your tasks</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {processedTasks.length} tasks • Timeline View • Live sync active
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">
+            {activeProject.name} <span className="font-light opacity-80">Timeline</span>
+          </h1>
+          <p className="text-sm font-medium text-[#FF2D88] mt-1">
+            {processedTasks.length} sandboxed tasks • Timeline View • Live sync active
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
           
-          <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
-            <button onClick={() => navigate('/board')} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
+          <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
+            <button 
+              onClick={() => navigate('/board')} 
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/5"
+            >
               <LayoutGrid size={16} /> Board
             </button>
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 bg-[#FF2D88] text-white shadow-[0_0_15px_rgba(255,45,136,0.4)]">
@@ -124,9 +224,9 @@ export default function Timeline() {
 
           <div className="w-px h-8 bg-gray-300 dark:bg-white/10 mx-1"></div>
 
-          {/* Assignee Dropdown */}
+          {/* Assignee Filter Dropdown */}
           <div className="relative">
-            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'assignee' ? null : 'assignee'); }} className={`flex items-center gap-2 bg-white dark:bg-[#121629] border hover:bg-gray-50 dark:hover:bg-white/5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeDropdown === 'assignee' || filterAssignee !== 'all' ? 'border-[#FF2D88] text-[#FF2D88] dark:text-white' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300'}`}>
+            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'assignee' ? null : 'assignee'); }} className={`flex items-center gap-2 bg-white dark:bg-[#121629] border hover:bg-gray-50 dark:hover:bg-white/5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeDropdown === 'assignee' || filterAssignee !== 'all' ? 'border-[#FF2D88] text-[#FF2D88] dark:text-[#FF2D88] shadow-sm' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 shadow-sm'}`}>
               <User size={16} /> {filterAssignee === 'all' ? 'Assignee' : filterAssignee}
             </button>
             {activeDropdown === 'assignee' && (
@@ -143,25 +243,41 @@ export default function Timeline() {
             )}
           </div>
 
-          <button onClick={() => navigate('/tasks/new')} className="bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] hover:opacity-90 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(255,45,136,0.3)] hover:scale-105 ml-2">
+          {/* Sort Dropdown */}
+          <div className="relative">
+            <button onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'sort' ? null : 'sort'); }} className={`flex items-center gap-2 bg-white dark:bg-[#121629] border hover:bg-gray-50 dark:hover:bg-white/5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${activeDropdown === 'sort' || sortBy !== 'newest' ? 'border-[#FF2D88] text-[#FF2D88] dark:text-[#FF2D88] shadow-sm' : 'border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 shadow-sm'}`}>
+              <ArrowUpDown size={16} /> Sort
+            </button>
+            {activeDropdown === 'sort' && (
+              <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="p-1.5 flex flex-col gap-0.5">
+                  <button onClick={() => setSortBy('newest')} className="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">Newest First {sortBy === 'newest' && <Check size={14} className="text-[#FF2D88]" />}</button>
+                  <button onClick={() => setSortBy('oldest')} className="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">Oldest First {sortBy === 'oldest' && <Check size={14} className="text-[#FF2D88]" />}</button>
+                  <button onClick={() => setSortBy('priority')} className="flex items-center justify-between w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg transition-colors">Highest Priority {sortBy === 'priority' && <Check size={14} className="text-[#FF2D88]" />}</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => navigate('/tasks/new')} className="bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] hover:opacity-90 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-[0_4px_14px_rgba(255,45,136,0.3)] hover:-translate-y-0.5 ml-2">
             <Plus size={18} /> New task
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-4 flex items-center gap-2 flex-shrink-0">
+        <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/50 text-red-600 dark:text-red-400 p-4 rounded-xl mb-4 flex items-center gap-2 flex-shrink-0 shadow-sm">
           <AlertCircle size={18} /> {error}
         </div>
       )}
 
       {/* TIMELINE CONTROL BAR */}
-      <div className="flex items-center justify-between bg-white dark:bg-[#121629] p-4 rounded-t-2xl border border-b-0 border-gray-200 dark:border-white/10 flex-shrink-0">
+      <div className="flex items-center justify-between bg-white dark:bg-[#121629] p-4 rounded-t-2xl border border-b-0 border-gray-200 dark:border-white/10 flex-shrink-0 shadow-sm z-10 relative">
         
         {/* Month Selector */}
         <div className="flex items-center gap-4 bg-gray-50 dark:bg-[#0A0D14] rounded-lg p-1 border border-gray-200 dark:border-white/5">
           <button onClick={handlePrevMonth} className="p-1.5 hover:bg-white dark:hover:bg-white/10 rounded-md transition-colors text-gray-600 dark:text-gray-400"><ArrowLeft size={16}/></button>
-          <span className="text-sm font-bold w-28 text-center text-gray-900 dark:text-white">
+          <span className="text-sm font-bold w-32 text-center text-gray-900 dark:text-white">
             {currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
           </span>
           <button onClick={handleNextMonth} className="p-1.5 hover:bg-white dark:hover:bg-white/10 rounded-md transition-colors text-gray-600 dark:text-gray-400"><ArrowRight size={16}/></button>
@@ -180,17 +296,18 @@ export default function Timeline() {
       {/* GANTT CHART CONTAINER */}
       <div className="flex-1 bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-b-2xl overflow-hidden flex flex-col shadow-sm">
         
-        <div className="flex flex-1 overflow-y-auto overflow-x-auto custom-scrollbar relative">
+        <div className="flex flex-1 overflow-y-auto overflow-x-auto glass-scroll relative">
           <div className="min-w-[1200px] w-full flex flex-col">
             
             {/* Header Row (Days 1 - 31) */}
-            <div className="flex border-b border-gray-200 dark:border-white/10 sticky top-0 z-20 bg-white/95 dark:bg-[#121629]/95 backdrop-blur-sm">
-              <div className="w-64 min-w-[250px] p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-white/10 sticky left-0 z-30 bg-white dark:bg-[#121629]">
-                Task
+            <div className="flex border-b border-gray-200 dark:border-white/10 sticky top-0 z-30 bg-white/95 dark:bg-[#121629]/95 backdrop-blur-sm">
+              <div className="w-80 min-w-[320px] p-4 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider border-r border-gray-200 dark:border-white/10 sticky left-0 z-40 bg-white dark:bg-[#121629] flex items-center justify-between">
+                <span>Task</span>
+                <span className="text-[10px] text-gray-400 font-normal normal-case italic opacity-80">Hover to edit dates</span>
               </div>
               <div className="flex-1 grid" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(40px, 1fr))` }}>
                 {daysArray.map(day => (
-                  <div key={day} className={`p-4 text-center text-xs font-bold border-r border-gray-100 dark:border-white/5 flex flex-col items-center justify-center ${isCurrentMonth && day === currentDay ? 'text-[#FF2D88]' : 'text-gray-500 dark:text-gray-400'}`}>
+                  <div key={day} className={`p-4 text-center text-xs font-bold border-r border-gray-100 dark:border-white/5 flex flex-col items-center justify-center ${isCurrentMonth && day === currentDay ? 'bg-[#FF2D88]/10 text-[#FF2D88]' : 'text-gray-500 dark:text-gray-400'}`}>
                     {day}
                   </div>
                 ))}
@@ -198,14 +315,14 @@ export default function Timeline() {
             </div>
 
             {/* Content Rows */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative pb-20">
               
               {/* "Today" Vertical Marker Line */}
               {isCurrentMonth && (
                 <div 
                   className="absolute top-0 bottom-0 z-10 border-l-2 border-[#FF2D88]/50 shadow-[0_0_10px_rgba(255,45,136,0.3)] pointer-events-none"
                   style={{ 
-                    left: `calc(250px + ((100% - 250px) / ${daysInMonth}) * ${currentDay - 1} + (((100% - 250px) / ${daysInMonth}) / 2))` 
+                    left: `calc(320px + ((100% - 320px) / ${daysInMonth}) * ${currentDay - 1} + (((100% - 320px) / ${daysInMonth}) / 2))` 
                   }}
                 >
                   <div className="absolute -top-3 -translate-x-1/2 bg-[#FF2D88] text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
@@ -220,27 +337,82 @@ export default function Timeline() {
                 </div>
               ) : (
                 processedTasks.map((task) => (
-                  <div key={task._id} className="flex border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group">
+                  <div key={task._id} className="flex border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group relative">
                     
-                    {/* Left Sidebar Info */}
-                    <div className="w-64 min-w-[250px] p-4 border-r border-gray-200 dark:border-white/10 sticky left-0 z-20 bg-white dark:bg-[#121629] group-hover:bg-gray-50 dark:group-hover:bg-[#1c2135] transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${task.isOverdue ? 'bg-red-500' : statusColors[task.status] || 'bg-gray-500'} shadow-[0_0_8px_currentColor] opacity-80`}></div>
-                        <div className="min-w-0">
-                          <p onClick={() => navigate(`/tasks/${task._id}`)} className="text-sm font-bold text-gray-900 dark:text-white truncate cursor-pointer hover:text-[#FF2D88] dark:hover:text-[#FF2D88] transition-colors">
-                            {task.title}
-                          </p>
-                          <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 truncate">
-                            {task.assignees?.map(a => a.name).join(', ') || 'Unassigned'}
-                          </p>
+                    {/* Left Sidebar Info (WITH INLINE EDITING) */}
+                    <div className="w-80 min-w-[320px] p-4 border-r border-gray-200 dark:border-white/10 sticky left-0 z-20 bg-white dark:bg-[#121629] group-hover:bg-gray-50 dark:group-hover:bg-[#1c2135] transition-colors flex items-center">
+                      
+                      {editingTaskId === task._id ? (
+                        /* INLINE EDIT MODE */
+                        <div className="flex flex-col gap-2 w-full animate-in fade-in">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-bold text-[#FF2D88] uppercase">Adjust Dates</span>
+                            <div className="flex gap-1">
+                              <button onClick={() => setEditingTaskId(null)} className="p-1 hover:bg-gray-200 dark:hover:bg-white/10 rounded text-gray-500"><X size={12}/></button>
+                              <button onClick={() => handleUpdateDates(task._id)} disabled={isUpdating} className="p-1 bg-[#FF2D88] hover:bg-[#ff2d88]/90 text-white rounded"><Check size={12}/></button>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[9px] text-gray-500 uppercase block mb-0.5">Start</label>
+                              <input 
+                                type="date" 
+                                value={editDates.startDate} 
+                                onChange={(e) => setEditDates({...editDates, startDate: e.target.value})}
+                                className="w-full text-xs p-1.5 bg-white dark:bg-[#0A0D14] border border-gray-200 dark:border-white/10 rounded focus:border-[#FF2D88] focus:outline-none"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[9px] text-gray-500 uppercase block mb-0.5">Due</label>
+                              <input 
+                                type="date" 
+                                value={editDates.dueDate} 
+                                onChange={(e) => setEditDates({...editDates, dueDate: e.target.value})}
+                                className="w-full text-xs p-1.5 bg-white dark:bg-[#0A0D14] border border-gray-200 dark:border-white/10 rounded focus:border-[#FF2D88] focus:outline-none"
+                              />
+                            </div>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        /* NORMAL READ-ONLY MODE */
+                        <div className="flex items-center justify-between w-full group/inner">
+                          <div className="flex items-center gap-3 min-w-0 pr-2">
+                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${task.isOverdue ? 'bg-red-500' : statusColors[task.status] || 'bg-gray-500'} shadow-[0_0_8px_currentColor] opacity-80`}></div>
+                            <div className="min-w-0">
+                              <p onClick={() => navigate(`/tasks/${task._id}`)} className="text-sm font-bold text-gray-900 dark:text-white truncate cursor-pointer hover:text-[#FF2D88] dark:hover:text-[#FF2D88] transition-colors leading-tight">
+                                {task.title}
+                              </p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                                  <Calendar size={10}/> 
+                                  {task.startDate ? new Date(task.startDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : '--'} - {task.dueDate ? new Date(task.dueDate).toLocaleDateString(undefined, {month: 'short', day: 'numeric'}) : '--'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Hover Edit Button */}
+                          <button 
+                            onClick={() => {
+                              setEditingTaskId(task._id);
+                              setEditDates({
+                                startDate: task.startDate ? task.startDate.split('T')[0] : '',
+                                dueDate: task.dueDate ? task.dueDate.split('T')[0] : ''
+                              });
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-[#FF2D88] hover:bg-[#FF2D88]/10 rounded-lg opacity-0 group-hover/inner:opacity-100 transition-all flex-shrink-0"
+                            title="Adjust Dates"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Right Grid Area (The Timeline Bar) */}
                     <div className="flex-1 grid py-2 relative" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(40px, 1fr))` }}>
                       
-                      {/* Grid Background Lines (Optional, keeps it looking like a chart) */}
+                      {/* Grid Background Lines */}
                       {daysArray.map(day => (
                         <div key={`bg-${day}`} className={`border-r border-gray-100/50 dark:border-white/5 col-start-${day} row-start-1 h-full`}></div>
                       ))}
@@ -248,11 +420,11 @@ export default function Timeline() {
                       {/* The Actual Task Bar */}
                       <div 
                         onClick={() => navigate(`/tasks/${task._id}`)}
-                        className={`row-start-1 h-8 my-auto rounded-lg mx-1 cursor-pointer transition-all hover:brightness-110 hover:shadow-lg z-10 flex items-center px-3 overflow-hidden ${task.isOverdue ? 'bg-red-500/80 hover:bg-red-500' : statusColors[task.status] || 'bg-gray-500/80'}`}
+                        className={`row-start-1 h-8 my-auto rounded-lg mx-1 cursor-pointer transition-all hover:brightness-110 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] z-10 flex items-center px-3 overflow-hidden ${task.isOverdue ? 'bg-red-500/80 hover:bg-red-500' : statusColors[task.status] || 'bg-gray-500/80'}`}
                         style={getGridPosition(task)}
                         title={`${task.title}\nStart: ${task.startDate ? new Date(task.startDate).toLocaleDateString() : 'N/A'}\nDue: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}`}
                       >
-                        <span className="text-xs font-bold text-white truncate drop-shadow-md">
+                        <span className="text-[11px] font-bold text-white truncate drop-shadow-md">
                           {task.title}
                         </span>
                       </div>

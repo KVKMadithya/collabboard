@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { Bell, ChevronDown, LogOut, Sun, Moon, Check, X, Loader2, Briefcase } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Sun, Moon, Check, X, Loader2, Briefcase, UserPlus, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Global Contexts
 import { useTheme } from '../context/ThemeContext';
-import { useProject } from '../context/ProjectContext'; // 👈 The Global Brain
+import { useProject } from '../context/ProjectContext'; 
 
 export default function TopBar({ user, onSignOut }) {
   const navigate = useNavigate();
   
   const { isDarkMode, toggleTheme } = useTheme();
-  const { projects, activeProject, switchProject, fetchProjects } = useProject(); // 👈 Accessing our sandbox logic
+  const { projects, activeProject, switchProject, fetchProjects } = useProject();
 
   const [greeting, setGreeting] = useState('Welcome Back');
   
@@ -53,8 +53,7 @@ export default function TopBar({ user, onSignOut }) {
   useEffect(() => {
     if (user) {
       fetchNotifications();
-      // Optional: Poll every 30 seconds for new invites
-      const interval = setInterval(fetchNotifications, 30000);
+      const interval = setInterval(fetchNotifications, 30000); // 30s polling
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -69,7 +68,7 @@ export default function TopBar({ user, onSignOut }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Accept/Decline Logic
+  // Accept/Decline Logic (For Invites Only)
   const handleResponse = async (notificationId, action) => {
     setIsNotifLoading(true);
     try {
@@ -80,7 +79,7 @@ export default function TopBar({ user, onSignOut }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ action }) // 'accept' or 'declined'
+        body: JSON.stringify({ action }) 
       });
 
       if (!response.ok) throw new Error('Action failed');
@@ -88,11 +87,10 @@ export default function TopBar({ user, onSignOut }) {
       // Remove the processed invite from the local state
       setNotifications(prev => prev.filter(n => n._id !== notificationId));
 
-      // 🚀 IF ACCEPTED: Tell the Global Context to fetch the user's projects again so the new group appears!
+      // IF ACCEPTED: Tell the Global Context to fetch the user's projects again so the new group appears!
       if (action === 'accept') {
         await fetchProjects();
       }
-
     } catch (err) {
       alert("Failed to process invitation.");
     } finally {
@@ -100,7 +98,35 @@ export default function TopBar({ user, onSignOut }) {
     }
   };
 
-  const pendingCount = notifications.filter(n => n.status === 'pending').length;
+  // 🛑 Mark non-actionable notifications (follows/ratings) as read and route to user
+  const handleReadAndNavigate = async (notif) => {
+    try {
+      const token = localStorage.getItem('collab_token');
+      // Mark as read in DB so it stops showing as pending/new
+      await fetch(`http://localhost:5000/api/members/notifications/${notif._id}/read`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Remove from local dropdown UI
+      setNotifications(prev => prev.filter(n => n._id !== notif._id));
+      
+      // Close dropdown & Route to user profile
+      setShowNotifDropdown(false);
+      if (notif.sender?._id) {
+        navigate(`/user/${notif.sender._id}`);
+      }
+    } catch (err) {
+      console.error("Failed to mark notification as read", err);
+    }
+  };
+
+  // 🛑 FIX: Unified logic for what makes a notification "visible" in the dropdown
+  const visibleNotifications = notifications.filter(n => {
+    if (n.type === 'invite') return n.status === 'pending';
+    return !n.isRead; // For social alerts (follows, ratings)
+  });
+
+  const pendingCount = visibleNotifications.length;
 
   return (
     <header className="flex justify-between items-center mb-10 font-sans tracking-wide transition-colors duration-300 relative z-40">
@@ -185,7 +211,7 @@ export default function TopBar({ user, onSignOut }) {
             <button 
               onClick={() => {
                 setShowNotifDropdown(!showNotifDropdown);
-                if (!showNotifDropdown) fetchNotifications(); // Refresh when opening
+                if (!showNotifDropdown) fetchNotifications(); 
               }}
               className="relative text-theme-muted hover:text-theme-text bg-theme-panel p-2.5 rounded-full border border-theme-border transition-all hover:scale-110"
             >
@@ -200,31 +226,50 @@ export default function TopBar({ user, onSignOut }) {
             {showNotifDropdown && (
               <div className="absolute right-0 top-full mt-3 w-80 bg-theme-panel border border-theme-border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="p-4 border-b border-theme-border flex items-center justify-between bg-black/5 dark:bg-white/5">
-                  <h4 className="font-bold text-sm text-theme-text">Invites</h4>
+                  <h4 className="font-bold text-sm text-theme-text">Notifications</h4>
                   {pendingCount > 0 && <span className="text-[10px] bg-[#FF2D88]/10 text-[#FF2D88] px-2 py-0.5 rounded font-bold">{pendingCount} New</span>}
                 </div>
 
                 <div className="max-h-80 overflow-y-auto premium-scrollbar p-2 space-y-2">
-                  {notifications.length === 0 ? (
-                    <p className="text-xs text-theme-muted text-center py-8">You're all caught up!</p>
+                  
+                  {/* 🛑 FIX: Safely map over the unified visibleNotifications array */}
+                  {visibleNotifications.length === 0 ? (
+                    <p className="text-xs text-theme-muted text-center py-8 font-medium">You're all caught up!</p>
                   ) : (
-                    notifications.map((notif) => (
-                      <div key={notif._id} className="p-3 bg-black/5 dark:bg-[#0A0D14] border border-theme-border rounded-xl space-y-3">
+                    visibleNotifications.map((notif) => (
+                      <div key={notif._id} className="p-3 bg-black/5 dark:bg-[#0A0D14] border border-theme-border rounded-xl space-y-3 relative group transition-colors hover:border-theme-muted/50">
                         <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm">
-                            {notif.sender?.name ? notif.sender.name.charAt(0).toUpperCase() : 'U'}
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden">
+                            {notif.sender?.profilePic 
+                              ? <img src={notif.sender.profilePic} alt="avatar" className="w-full h-full object-cover"/> 
+                              : notif.sender?.firstName ? notif.sender.firstName.charAt(0).toUpperCase() : 'U'}
                           </div>
-                          <div>
-                            <p className="text-[11px] text-theme-muted mt-0.5 leading-snug">
-                              <span className="font-bold text-theme-text">{notif.sender?.name}</span> invited you to join <strong className="text-[#FF2D88]">{notif.project?.name}</strong>.
-                            </p>
-                            <span className="inline-block mt-1 bg-white/10 dark:bg-white/5 text-theme-text text-[10px] px-2 py-0.5 rounded border border-theme-border font-medium">
-                              Role: {notif.roleOffered}
-                            </span>
+                          
+                          <div className="flex-1">
+                            {notif.type === 'invite' ? (
+                              <>
+                                <p className="text-[11px] text-theme-muted leading-snug">
+                                  <span className="font-bold text-theme-text">{notif.sender?.firstName} {notif.sender?.lastName}</span> invited you to join <strong className="text-[#FF2D88]">{notif.project?.name}</strong>.
+                                </p>
+                                <span className="inline-block mt-1 bg-white/10 dark:bg-white/5 text-theme-text text-[10px] px-2 py-0.5 rounded border border-theme-border font-medium">
+                                  Role: {notif.roleOffered}
+                                </span>
+                              </>
+                            ) : (
+                              <div onClick={() => handleReadAndNavigate(notif)} className="cursor-pointer">
+                                <p className="text-[11px] text-theme-muted leading-snug">
+                                  <span className="font-bold text-theme-text">{notif.sender?.firstName} {notif.sender?.lastName}</span> {notif.message?.replace(`${notif.sender?.firstName} ${notif.sender?.lastName} `, '')}
+                                </p>
+                                <span className={`inline-flex items-center gap-1 mt-1 text-[10px] px-2 py-0.5 rounded border font-medium ${notif.type === 'rating' ? 'bg-[#FFC107]/10 text-[#FFC107] border-[#FFC107]/20' : 'bg-[#00FF66]/10 text-[#00FF66] border-[#00FF66]/20'}`}>
+                                  {notif.type === 'rating' ? <Star size={10} fill="currentColor"/> : <UserPlus size={10} />}
+                                  {notif.type === 'rating' ? 'New Rating' : 'New Follower'}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {notif.status === 'pending' ? (
+                        {notif.type === 'invite' && (
                           <div className="flex items-center gap-2 pt-1">
                             <button 
                               onClick={() => handleResponse(notif._id, 'accept')}
@@ -241,10 +286,6 @@ export default function TopBar({ user, onSignOut }) {
                               <X size={14} /> Decline
                             </button>
                           </div>
-                        ) : (
-                          <span className="text-[10px] uppercase font-bold text-theme-muted tracking-wider block text-center bg-black/5 dark:bg-white/5 py-1.5 rounded-lg">
-                            {notif.status}
-                          </span>
                         )}
                       </div>
                     ))

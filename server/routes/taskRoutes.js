@@ -6,6 +6,7 @@ const upload = require('../middleware/uploadMiddleware'); // Import Multer middl
 // GET requests
 router.get('/', taskController.getTasks);
 router.get('/:id', taskController.getTaskById);
+router.delete('/:id', taskController.deleteTask);
 
 // POST request (Intercepts up to 5 files under the field name 'attachments')
 router.post('/', upload.array('attachments', 5), taskController.createTask);

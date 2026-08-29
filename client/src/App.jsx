@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
+import ViewProfile from './pages/ViewProfile'; // 👈 NEW: Imported the public profile viewer
 import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
@@ -18,7 +19,7 @@ import Timeline from './pages/Timeline';
 
 // Global Contexts
 import { ThemeProvider } from './context/ThemeContext';
-import { ProjectProvider } from './context/ProjectContext'; // 👈 NEW: Import the Project Brain
+import { ProjectProvider } from './context/ProjectContext'; 
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
@@ -36,12 +37,6 @@ const DashboardLayout = ({ user, onSignOut }) => {
     </div>
   );
 };
-
-const Placeholder = ({ title }) => (
-  <div className="border-2 border-dashed border-theme-border rounded-xl h-96 flex items-center justify-center text-theme-muted text-xl transition-colors duration-300">
-    {title} content will go here
-  </div>
-);
 
 function App() {
   const [user, setUser] = useState(null);
@@ -96,11 +91,10 @@ function App() {
 
   return (
     <ThemeProvider>
-      {/* 👈 NEW: Wrap the router in the ProjectProvider and pass the user state! */}
       <ProjectProvider user={user}> 
         <BrowserRouter>
           <Routes>
-            
+
             <Route path="/auth" element={
               user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
             } />
@@ -109,7 +103,7 @@ function App() {
               user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
             }>
               <Route path="/" element={<Dashboard />} />
-              
+
               {/* Core Task & Project Management Routes */}
               <Route path="/board" element={<Tasks />} />
               <Route path="/tasks/new" element={<TaskForm />} />
@@ -118,6 +112,7 @@ function App() {
 
               {/* Other App Features */}
               <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
+              <Route path="/user/:id" element={<ViewProfile />} /> {/* 👈 NEW: Added public profile routing */}
               <Route path="/notes" element={<Notes user={user} />} />
               <Route path="/ai-assistant" element={<AiAssistant />} />
               <Route path="/calendar" element={<Calendar />} />

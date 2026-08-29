@@ -20,6 +20,7 @@ app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/projects', require('./routes/projectRoutes'));
 app.use('/api/members', require('./routes/memberRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // Import and mount the AI routes
 const aiRoutes = require('./routes/aiRoutes');

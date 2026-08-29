@@ -1,15 +1,18 @@
-import { useState } from 'react';
-import { Star, CheckSquare, Users, Edit3, MessageSquare, UserPlus, MapPin, Camera, Palette, X, UploadCloud } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  Star, CheckSquare, Users, Edit3, MapPin, 
+  Camera, Palette, X, UploadCloud, Loader2 
+} from 'lucide-react';
 
-// Accept a toggleRefresh function from App.jsx so we can reload data after editing
 export default function Profile({ user, toggleRefresh }) {
   const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
   const [activeTheme, setActiveTheme] = useState('galaxy');
   const [isEditing, setIsEditing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-
-  // We set this to true for now. Later, if viewing someone else's profile, pass false.
-  const isOwnProfile = true; 
+  
+  // 🛑 NEW: State to hold live, calculated stats from the database
+  const [liveStats, setLiveStats] = useState({ rating: "0.0", tasksCompleted: 0, followers: 0 });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   const [editForm, setEditForm] = useState({
     firstName: user?.firstName || '',
@@ -27,6 +30,32 @@ export default function Profile({ user, toggleRefresh }) {
   };
   const currentTheme = themes[activeTheme];
 
+  // 🛑 THE FIX: Fetch live stats for the logged-in user on mount
+  useEffect(() => {
+    const fetchLiveStats = async () => {
+      if (!user?._id) return;
+      setIsLoadingStats(true);
+      try {
+        const token = localStorage.getItem('collab_token');
+        const response = await fetch(`http://localhost:5000/api/users/${user._id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Inject the dynamically calculated stats from our new backend route
+          setLiveStats(data.stats); 
+        }
+      } catch (error) {
+        console.error('Failed to fetch live stats', error);
+      } finally {
+        setIsLoadingStats(false);
+      }
+    };
+
+    fetchLiveStats();
+  }, [user]);
+
   const handleMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -34,7 +63,6 @@ export default function Profile({ user, toggleRefresh }) {
     setMousePos({ x, y });
   };
 
-  // Convert image to Base64 for database storage
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -51,7 +79,7 @@ export default function Profile({ user, toggleRefresh }) {
     setIsUploading(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://127.0.0.1:5000/api/auth/me', {
+      const response = await fetch('http://localhost:5000/api/auth/me', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -62,7 +90,7 @@ export default function Profile({ user, toggleRefresh }) {
 
       if (response.ok) {
         setIsEditing(false);
-        if (toggleRefresh) toggleRefresh(); // Tell App.jsx to fetch the new data
+        if (toggleRefresh) toggleRefresh(); // Triggers global app refresh to update TopBar avatar
       }
     } catch (error) {
       console.error('Failed to update profile');
@@ -74,22 +102,20 @@ export default function Profile({ user, toggleRefresh }) {
   if (!user) return null;
 
   return (
-    // FIX: Removed 'h-full' and added 'pb-10'. This allows the component to grow naturally and scroll!
-    <div className="w-full max-w-7xl mx-auto flex flex-col font-sans pb-10">
+    <div className="w-full max-w-7xl mx-auto flex flex-col font-sans pb-10 px-4 sm:px-8 animate-fade-in">
       
       {/* --- Edit Profile Modal --- */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-[#121629] rounded-2xl border border-white/10 shadow-2xl p-6 relative">
-            <button onClick={() => setIsEditing(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="w-full max-w-lg bg-[#121629] rounded-2xl border border-white/10 shadow-2xl p-6 relative zoom-in-95 animate-in">
+            <button onClick={() => setIsEditing(false)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
               <X size={20} />
             </button>
             <h3 className="text-xl font-bold text-white mb-6">Edit Profile</h3>
             
             <form onSubmit={handleSaveProfile} className="space-y-4">
-              {/* Profile Pic Upload */}
               <div className="flex flex-col items-center gap-3 mb-6">
-                <div className="w-24 h-24 rounded-full overflow-hidden bg-[#0A0D14] border-2 border-white/10 relative group">
+                <div className="w-24 h-24 rounded-full overflow-hidden bg-[#0A0D14] border-2 border-white/10 relative group shadow-inner">
                   {editForm.profilePic ? (
                     <img src={editForm.profilePic} alt="Preview" className="w-full h-full object-cover" />
                   ) : (
@@ -102,32 +128,32 @@ export default function Profile({ user, toggleRefresh }) {
                     <input type="file" accept="image/*" onChange={handleImageUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
                   </div>
                 </div>
-                <p className="text-xs text-gray-400">Click to upload picture</p>
+                <p className="text-xs text-gray-400 font-medium">Click avatar to upload</p>
               </div>
 
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="text-xs text-gray-400">First Name</label>
-                  <input type="text" value={editForm.firstName} onChange={(e) => setEditForm({...editForm, firstName: e.target.value})} className="w-full bg-[#0A0D14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm mt-1" />
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">First Name</label>
+                  <input type="text" value={editForm.firstName} onChange={(e) => setEditForm({...editForm, firstName: e.target.value})} className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-[#FF2D88] outline-none transition-colors" />
                 </div>
                 <div className="flex-1">
-                  <label className="text-xs text-gray-400">Last Name</label>
-                  <input type="text" value={editForm.lastName} onChange={(e) => setEditForm({...editForm, lastName: e.target.value})} className="w-full bg-[#0A0D14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm mt-1" />
+                  <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Last Name</label>
+                  <input type="text" value={editForm.lastName} onChange={(e) => setEditForm({...editForm, lastName: e.target.value})} className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-[#FF2D88] outline-none transition-colors" />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-400">Specialization / Role</label>
-                <input type="text" value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} placeholder="e.g. AI Engineer" className="w-full bg-[#0A0D14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm mt-1" />
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Specialization / Role</label>
+                <input type="text" value={editForm.role} onChange={(e) => setEditForm({...editForm, role: e.target.value})} placeholder="e.g. AI Engineer" className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-[#FF2D88] outline-none transition-colors" />
               </div>
 
               <div>
-                <label className="text-xs text-gray-400">University / Organization</label>
-                <input type="text" value={editForm.university} onChange={(e) => setEditForm({...editForm, university: e.target.value})} placeholder="e.g. NSBM Green University" className="w-full bg-[#0A0D14] border border-white/10 rounded-lg px-3 py-2 text-white text-sm mt-1" />
+                <label className="text-[11px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">University / Organization</label>
+                <input type="text" value={editForm.university} onChange={(e) => setEditForm({...editForm, university: e.target.value})} placeholder="e.g. NSBM Green University" className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:border-[#FF2D88] outline-none transition-colors" />
               </div>
 
-              <button type="submit" disabled={isUploading} className="w-full bg-[#FF2D88] text-white py-2.5 rounded-lg mt-4 font-medium hover:bg-[#FF2D88]/90 transition-colors">
-                {isUploading ? 'Saving...' : 'Save Changes'}
+              <button type="submit" disabled={isUploading} className="w-full bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] text-white py-3.5 rounded-xl mt-6 font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(255,45,136,0.3)] hover:-translate-y-0.5">
+                {isUploading ? <Loader2 className="animate-spin" size={18}/> : 'Save Changes'}
               </button>
             </form>
           </div>
@@ -172,47 +198,45 @@ export default function Profile({ user, toggleRefresh }) {
             <div className="flex-1">
               <h2 className="text-4xl sm:text-5xl font-bold text-white tracking-tight">{user.firstName} {user.lastName}</h2>
               <div className="flex flex-wrap items-center gap-2 text-gray-400 text-base mt-3">
-                <span className="font-medium text-gray-300">{user.role || 'Add a role'}</span> 
+                <span className="font-medium text-gray-300">{user.role || 'Member'}</span> 
                 <span className="text-gray-600 hidden sm:inline">•</span> 
-                <span className="flex items-center gap-1.5"><MapPin size={16}/> {user.university || 'Add a university'}</span>
+                <span className="flex items-center gap-1.5"><MapPin size={16}/> {user.university || 'No university specified'}</span>
               </div>
               <p className="text-gray-500 text-sm mt-2">{user.email}</p>
             </div>
 
             <div className="w-full lg:w-96 flex flex-col gap-8">
+              
+              {/* 🛑 LIVE STATS SECTION */}
               <div className="flex justify-between items-center bg-[#0A0D14] p-6 rounded-2xl border border-white/5 shadow-inner">
                 <div className="flex flex-col items-center">
-                  <p className="text-white font-bold text-2xl flex items-center gap-1.5"><Star size={20} className="text-[#FFC107] fill-[#FFC107]" /> {user.stats?.rating || "0.0"}</p>
+                  <p className="text-white font-bold text-2xl flex items-center gap-1.5">
+                    <Star size={20} className="text-[#FFC107] fill-[#FFC107]" /> 
+                    {isLoadingStats ? <Loader2 size={18} className="animate-spin text-gray-500"/> : liveStats.rating}
+                  </p>
                   <p className="text-gray-500 text-xs uppercase tracking-widest mt-1.5">Rating</p>
                 </div>
                 <div className="w-px h-10 bg-white/10"></div>
                 <div className="flex flex-col items-center">
-                  <p className="text-white font-bold text-2xl flex items-center gap-1.5"><CheckSquare size={20} className="text-[#00FF66]" /> {user.stats?.tasksCompleted || 0}</p>
+                  <p className="text-white font-bold text-2xl flex items-center gap-1.5">
+                    <CheckSquare size={20} className="text-[#00FF66]" /> 
+                    {isLoadingStats ? <Loader2 size={18} className="animate-spin text-gray-500"/> : liveStats.tasksCompleted}
+                  </p>
                   <p className="text-gray-500 text-xs uppercase tracking-widest mt-1.5">Tasks</p>
                 </div>
                 <div className="w-px h-10 bg-white/10"></div>
                 <div className="flex flex-col items-center">
-                  <p className="text-white font-bold text-2xl flex items-center gap-1.5"><Users size={20} className="text-[#3B28CC]" /> {user.stats?.followers || 0}</p>
+                  <p className="text-white font-bold text-2xl flex items-center gap-1.5">
+                    <Users size={20} className="text-[#3B28CC]" /> 
+                    {isLoadingStats ? <Loader2 size={18} className="animate-spin text-gray-500"/> : liveStats.followers}
+                  </p>
                   <p className="text-gray-500 text-xs uppercase tracking-widest mt-1.5">Followers</p>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                {isOwnProfile ? (
-                  <button onClick={() => setIsEditing(true)} className="w-full bg-gradient-to-r from-[#FF2D88] to-[#3B28CC] text-white py-3.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-lg shadow-[#FF2D88]/20">
-                    <Edit3 size={18} /> Edit Account
-                  </button>
-                ) : (
-                  <div className="flex gap-3">
-                    <button className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 py-3.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors">
-                      <UserPlus size={18} /> Follow
-                    </button>
-                    <button className="flex-1 bg-white/5 hover:bg-white/10 text-white border border-white/10 py-3.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors">
-                      <MessageSquare size={18} /> Review
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button onClick={() => setIsEditing(true)} className="w-full bg-gradient-to-r from-[#FF2D88] to-[#3B28CC] text-white py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-[0_4px_14px_rgba(255,45,136,0.3)] hover:-translate-y-0.5">
+                <Edit3 size={18} /> Edit Account
+              </button>
               
             </div>
           </div>

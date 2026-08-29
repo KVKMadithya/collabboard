@@ -1,28 +1,44 @@
 const Note = require('../models/Note');
 
-// Get all notes (Populates the author's name so we can display who wrote it)
+// Get all notes (Sandboxed to the active project)
 exports.getNotes = async (req, res) => {
   try {
-    const notes = await Note.find().populate('author', 'firstName lastName role');
+    const { projectId } = req.query; // 👈 Extract projectId from the URL query
+
+    if (!projectId) {
+      return res.status(400).json({ message: 'Project ID is required to fetch notes.' });
+    }
+
+    // 🛑 Fetch ONLY notes linked to this specific workspace, sorted by newest first
+    const notes = await Note.find({ project: projectId })
+      .populate('author', 'firstName lastName role profilePic')
+      .sort({ createdAt: -1 });
+
     res.json(notes);
   } catch (error) {
     res.status(500).json({ message: 'Server Error fetching notes' });
   }
 };
 
-// Create a new note
+// Create a new note (Locked to the active project)
 exports.createNote = async (req, res) => {
   try {
-    const { title, content, category } = req.body;
+    const { title, content, category, projectId } = req.body; // 👈 Expect projectId from the frontend
+
+    if (!projectId) {
+      return res.status(400).json({ message: 'Project ID is required to create a note.' });
+    }
+
     const note = await Note.create({
       title,
       content,
       category,
+      project: projectId, // 🛑 Binds the note to the workspace
       author: req.user._id // Automatically assigned from the logged-in user
     });
     
     // We populate it immediately so the frontend has the author details right away
-    const populatedNote = await Note.findById(note._id).populate('author', 'firstName lastName role');
+    const populatedNote = await Note.findById(note._id).populate('author', 'firstName lastName role profilePic');
     res.status(201).json(populatedNote);
   } catch (error) {
     res.status(500).json({ message: 'Server Error creating note' });

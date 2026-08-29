@@ -195,3 +195,31 @@ exports.updateMemberRole = async (req, res) => {
     res.status(500).json({ message: "Failed to update role", error: error.message });
   }
 };
+
+// 7. REMOVE MEMBER FROM PROJECT (LEADER ONLY)
+exports.removeMember = async (req, res) => {
+  try {
+    const { projectId, memberId } = req.body;
+
+    const project = await Project.findById(projectId);
+    if (!project) return res.status(404).json({ message: "Project not found." });
+
+    // Only leader can remove members
+    if (project.leader.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Access denied. Only the project leader can remove members." });
+    }
+
+    // Cannot remove the leader
+    if (project.leader.toString() === memberId) {
+      return res.status(400).json({ message: "You cannot remove the project leader." });
+    }
+
+    // Filter out the member
+    project.members = project.members.filter(m => m.user.toString() !== memberId);
+    await project.save();
+
+    res.status(200).json({ message: "Member removed successfully." });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to remove member", error: error.message });
+  }
+};

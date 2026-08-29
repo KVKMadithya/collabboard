@@ -14,16 +14,20 @@ const notificationSchema = new mongoose.Schema({
   project: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Project', 
-    required: true // 👈 Locks the invite securely to a specific workspace
+    required: false 
   },
   type: { 
     type: String, 
-    enum: ['invite', 'alert'], 
-    default: 'invite' 
+    enum: ['invite', 'alert', 'follow', 'rating', 'mention'], 
+    default: 'alert' 
+  },
+  message: {
+    type: String,
+    required: true
   },
   roleOffered: { 
     type: String, 
-    enum: [ // 👈 Matches the Project roles 1:1
+    enum: [ 
       'Fullstack/Leader', 
       'Frontend Developer', 
       'Backend Developer', 
@@ -33,14 +37,14 @@ const notificationSchema = new mongoose.Schema({
       'QA Tester',
       'Viewer'
     ], 
-    required: true 
+    required: false 
   },
   status: { 
     type: String, 
-    enum: ['pending', 'accepted', 'declined'], 
+    enum: ['pending', 'accepted', 'declined', 'info'], // 👈 Added 'info' for social alerts
     default: 'pending' 
   },
-  read: { 
+  isRead: { 
     type: Boolean, 
     default: false 
   }
