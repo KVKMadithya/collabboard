@@ -18,7 +18,15 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
+<<<<<<< HEAD
 app.use('/api/reports', require('./routes/reportRoutes'));
+=======
+app.use('/api/projects', require('./routes/projectRoutes'));
+app.use('/api/members', require('./routes/memberRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
+app.use('/api/github', require('./routes/githubRoutes'));
+app.use('/api/search', require('./routes/searchRoutes'));
+>>>>>>> 83db1e098c77fe84c616d42e67eec2a582c71115
 
 // Import and mount the AI routes
 const aiRoutes = require('./routes/aiRoutes');

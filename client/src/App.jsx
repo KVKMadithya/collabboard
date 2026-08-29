@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
+import ViewProfile from './pages/ViewProfile'; 
 import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
@@ -11,14 +12,17 @@ import Calendar from './pages/Calendar';
 import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
+import GitFeed from './pages/GitFeed'; 
+import SearchList from './pages/SearchList';
 
-// 👇 New Imports for the 3-Page Task Architecture
+// Task Architecture
 import TaskForm from './pages/TaskForm';
 import TaskDetail from './pages/TaskDetail';
 import Timeline from './pages/Timeline';
 
-// 👇 Import the new Theme Provider Brain
+// Global Contexts
 import { ThemeProvider } from './context/ThemeContext';
+import { ProjectProvider } from './context/ProjectContext'; 
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
@@ -30,19 +34,12 @@ const DashboardLayout = ({ user, onSignOut }) => {
           onSignOut={onSignOut}
         />
         <div className="flex-1 flex flex-col min-h-0">
-  <Outlet />
-</div>
+          <Outlet />
+        </div>
       </main>
     </div>
   );
 };
-
-const Placeholder = ({ title }) => (
-  // 👇 Upgraded to theme variables
-  <div className="border-2 border-dashed border-theme-border rounded-xl h-96 flex items-center justify-center text-theme-muted text-xl transition-colors duration-300">
-    {title} content will go here
-  </div>
-);
 
 function App() {
   const [user, setUser] = useState(null);
@@ -86,7 +83,6 @@ function App() {
 
   if (isLoading) {
     return (
-      // 👇 Upgraded loading screen to theme variables
       <div className="flex h-screen w-full bg-theme-bg items-center justify-center text-theme-text font-sans transition-colors duration-300">
         <div className="flex flex-col items-center gap-4">
           <div className="w-10 h-10 border-4 border-theme-border border-t-[#FF2D88] rounded-full animate-spin"></div>
@@ -97,26 +93,16 @@ function App() {
   }
 
   return (
-    // 👇 Wrapped the entire application in the ThemeProvider
     <ThemeProvider>
-      <BrowserRouter>
-        <Routes>
-          
-          <Route path="/auth" element={
-            user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
-          } />
+      <ProjectProvider user={user}> 
+        <BrowserRouter>
+          <Routes>
 
-          <Route element={
-            user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
-          }>
-            <Route path="/" element={<Dashboard />} />
-            
-            {/* 👇 Core Task & Project Management Routes */}
-            <Route path="/board" element={<Tasks />} />
-            <Route path="/tasks/new" element={<TaskForm />} />
-            <Route path="/tasks/:id" element={<TaskDetail />} />
-            <Route path="/timeline" element={<Timeline />} />
+            <Route path="/auth" element={
+              user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
+            } />
 
+<<<<<<< HEAD
             {/* 👇 Other App Features */}
             <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
             <Route path="/notes" element={<Notes user={user} />} />
@@ -125,9 +111,33 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/members" element={<Members />} /> {/* <-- ADD THIS */}
           </Route>
+=======
+            <Route element={
+              user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
+            }>
+              <Route path="/" element={<Dashboard />} />
+>>>>>>> 83db1e098c77fe84c616d42e67eec2a582c71115
 
-        </Routes>
-      </BrowserRouter>
+              {/* Core Task & Project Management Routes */}
+              <Route path="/board" element={<Tasks />} />
+              <Route path="/tasks/new" element={<TaskForm />} />
+              <Route path="/tasks/:id" element={<TaskDetail />} />
+              <Route path="/timeline" element={<Timeline />} />
+
+              {/* Other App Features */}
+              <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
+              <Route path="/user/:id" element={<ViewProfile />} /> 
+              <Route path="/notes" element={<Notes user={user} />} />
+              <Route path="/ai-assistant" element={<AiAssistant />} />
+              <Route path="/calendar" element={<Calendar />} />
+              <Route path="/members" element={<Members />} /> 
+              <Route path="/git" element={<GitFeed user={user} />} />
+              <Route path="/search" element={<SearchList />} />
+            </Route>
+
+          </Routes>
+        </BrowserRouter>
+      </ProjectProvider>
     </ThemeProvider>
   );
 }

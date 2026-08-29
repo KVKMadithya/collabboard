@@ -8,7 +8,13 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: false },
   role: { type: String, default: 'Member' }, 
   university: { type: String, default: '' },  
-  profilePic: { type: String, default: '' }, // 👈 Will store Base64 image data
+  profilePic: { type: String, default: '' },
+  followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  ratings: [{
+    rater: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    score: { type: Number, required: true }
+  }], 
 }, { timestamps: true });
 
 // Hash the password before saving (Removed 'next' because it is an async function)

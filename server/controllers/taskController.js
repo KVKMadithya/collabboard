@@ -1,9 +1,17 @@
 const Task = require('../models/Task');
 
-// GET /api/tasks (Fetch all tasks for the board and timeline)
+// GET /api/tasks (Fetch all tasks for the ACTIVE project only)
 exports.getTasks = async (req, res) => {
   try {
-    const tasks = await Task.find(); 
+    const { projectId } = req.query; // 👈 Extract the project ID from the request
+
+    if (!projectId) {
+      return res.status(400).json({ message: "Project ID is required to fetch tasks." });
+    }
+
+    // 🛑 STRICT SANDBOXING: Fetch tasks that only belong to this specific project
+    const tasks = await Task.find({ project: projectId }).sort({ createdAt: -1 }); 
+    
     res.status(200).json(tasks);     
   } catch (error) {
     res.status(500).json({ message: "Server Error", error });
@@ -21,11 +29,16 @@ exports.getTaskById = async (req, res) => {
   }
 };
 
-// POST /api/tasks (Create a new task with files)
+// POST /api/tasks (Create a new task locked to a project, with files)
 exports.createTask = async (req, res) => {
   try {
-    let { title, description, status, priority, startDate, dueDate, tags, assignees } = req.body;
+    // 👈 Added projectId to the destructuring
+    let { title, description, status, priority, startDate, dueDate, tags, assignees, projectId } = req.body; 
     
+    if (!projectId) {
+      return res.status(400).json({ message: "Project ID is required to create a task." });
+    }
+
     // If sending via FormData (for files), arrays come in as strings. We must parse them.
     if (typeof tags === 'string') tags = JSON.parse(tags);
     if (typeof assignees === 'string') assignees = JSON.parse(assignees);
@@ -43,6 +56,7 @@ exports.createTask = async (req, res) => {
 
     // Create a new Mongoose document
     const newTask = new Task({
+      project: projectId, // 🛑 Binds the task permanently to the active workspace
       title,
       description,
       status,
@@ -77,5 +91,16 @@ exports.updateTask = async (req, res) => {
     res.status(200).json(updatedTask);
   } catch (error) {
     res.status(500).json({ message: "Failed to update task", error });
+  }
+};
+
+// DELETE /api/tasks/:id
+exports.deleteTask = async (req, res) => {
+  try {
+    const deletedTask = await Task.findByIdAndDelete(req.params.id);
+    if (!deletedTask) return res.status(404).json({ message: "Task not found" });
+    res.status(200).json({ message: "Task deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Failed to delete task", error });
   }
 };
