@@ -1,55 +1,127 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  User, Palette, Bot, Bell, Shield, Check, Save, 
-  Globe, Laptop, Key, Sparkles, Moon
+  Lock, Mail, Palette, Bot, Globe, Shield, Check, Save 
 } from 'lucide-react';
 
+const LANGUAGES = [
+  { code: 'en', label: 'English (US)' },
+  { code: 'en-GB', label: 'English (UK)' },
+  { code: 'si', label: 'Sinhala (සිංහල)' },
+  { code: 'ta', label: 'Tamil (தமிழ்)' },
+  { code: 'fr', label: 'French (Français)' },
+  { code: 'es', label: 'Spanish (Español)' },
+  { code: 'de', label: 'German (Deutsch)' },
+  { code: 'zh', label: 'Chinese (中文)' },
+  { code: 'ja', label: 'Japanese (日本語)' },
+  { code: 'ko', label: 'Korean (한국어)' },
+  { code: 'ar', label: 'Arabic (العربية)' },
+  { code: 'hi', label: 'Hindi (हिन्दी)' },
+  { code: 'pt', label: 'Portuguese (Português)' },
+  { code: 'ru', label: 'Russian (Русский)' },
+];
+
+const TIMEZONES = [
+  { value: 'UTC (GMT+0:00)', label: 'UTC (GMT+0:00)' },
+  { value: 'America/Los_Angeles (PST/PDT)', label: 'America/Los_Angeles (PST/PDT)' },
+  { value: 'America/Chicago (CST/CDT)', label: 'America/Chicago (CST/CDT)' },
+  { value: 'America/New_York (EST/EDT)', label: 'America/New_York (EST/EDT)' },
+  { value: 'Europe/London (GMT/BST)', label: 'Europe/London (GMT/BST)' },
+  { value: 'Europe/Paris (CET/CEST)', label: 'Europe/Paris (CET/CEST)' },
+  { value: 'Asia/Dubai (GST)', label: 'Asia/Dubai (GST)' },
+  { value: 'Asia/Kolkata (IST)', label: 'Asia/Kolkata (IST)' },
+  { value: 'Asia/Colombo (GMT+5:30)', label: 'Asia/Colombo (GMT+5:30)' },
+  { value: 'Asia/Singapore (SGT)', label: 'Asia/Singapore (SGT)' },
+  { value: 'Asia/Tokyo (JST)', label: 'Asia/Tokyo (JST)' },
+  { value: 'Australia/Sydney (AEST/AEDT)', label: 'Australia/Sydney (AEST/AEDT)' },
+  { value: 'Pacific/Auckland (NZST/NZDT)', label: 'Pacific/Auckland (NZST/NZDT)' },
+];
+
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState('profile');
+  const [activeTab, setActiveTab] = useState('account');
   const [showSavedToast, setShowSavedToast] = useState(false);
 
-  // Form States
-  const [profile, setProfile] = useState({
-    displayName: 'Iruni Weerakkody',
-    email: 'iruni@collabboard.io',
-    role: 'Frontend Developer',
-    bio: 'Building real-time collaboration tools for developers.'
+  // 1. Email & Password Management States
+  const [emailData, setEmailData] = useState({
+    currentEmail: '',
+    newEmail: ''
   });
 
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  // 2. Appearance & Custom Color
   const [appearance, setAppearance] = useState({
-    accentColor: '#FF2D88',
+    accentColor: '#FF2D88', 
     pinSidebarByDefault: false,
-    compactMode: false
   });
 
+  // 3. AI Assistant
   const [aiConfig, setAiConfig] = useState({
     responseStyle: 'Concise',
     customGreeting: 'Meow! How can I help with your board today?',
-    temperature: 0.5
   });
 
+  // 4. Regional & Language
   const [regional, setRegional] = useState({
+    language: 'en',
     timezone: 'Asia/Colombo (GMT+5:30)',
     slHolidayAlerts: true,
-    taskDueReminders: true
   });
 
+  // 5. Security Access
   const [security, setSecurity] = useState({
     defaultShareRole: 'view',
     twoFactorEnabled: false
   });
 
-  const handleSave = (e) => {
+  // Get current logged-in user's email
+  useEffect(() => {
+    const storedUser = localStorage.getItem('userInfo');
+
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+
+        setEmailData(prev => ({
+          ...prev,
+          currentEmail: parsedUser.email || ''
+        }));
+      } catch (err) {
+        console.error('Error parsing user data:', err);
+      }
+    }
+  }, []);
+
+  // Save Handler
+  const handleSave = async (e) => {
     e.preventDefault();
+    
+    const payload = {
+      emailData,
+      passwordData,
+      preferences: {
+        ...appearance,
+        ...aiConfig,
+        ...regional,
+        ...security
+      }
+    };
+    
+    console.log("Saving to backend...", payload);
+    // Add your API fetch/axios call here 
+
     setShowSavedToast(true);
     setTimeout(() => setShowSavedToast(false), 3000);
   };
 
   const tabs = [
-    { id: 'profile', label: 'Profile & Account', icon: User },
+    { id: 'account', label: 'Email & Password', icon: Lock },
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'ai', label: 'AI Assistant', icon: Bot },
-    { id: 'regional', label: 'Notifications & Region', icon: Bell },
+    { id: 'regional', label: 'Language & Region', icon: Globe },
     { id: 'security', label: 'Security & Access', icon: Shield },
   ];
 
@@ -60,10 +132,11 @@ export default function Settings() {
       <div className="flex items-center justify-between pb-4 border-b border-white/10 flex-shrink-0 mb-6">
         <div>
           <h1 className="text-2xl font-bold">Settings</h1>
-          <p className="text-xs text-gray-400 mt-1">Manage your account, preferences, and AI controls</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Manage your security credentials and app preferences
+          </p>
         </div>
 
-        {/* Save Notification Toast */}
         {showSavedToast && (
           <div className="flex items-center gap-2 bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 px-4 py-2 rounded-xl text-xs font-medium animate-in fade-in">
             <Check size={16} />
@@ -80,13 +153,15 @@ export default function Settings() {
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                style={isActive ? { backgroundColor: appearance.accentColor } : {}}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-xs sm:text-sm font-medium transition-all text-left whitespace-nowrap ${
                   isActive
-                    ? 'bg-[#FF2D88] text-white shadow-lg shadow-[#FF2D88]/20 font-bold'
+                    ? 'text-white shadow-lg font-bold'
                     : 'text-gray-400 hover:text-white hover:bg-[#121629]'
                 }`}
               >
@@ -101,54 +176,131 @@ export default function Settings() {
         <div className="flex-1 bg-[#060813] border border-white/10 rounded-2xl p-6 overflow-y-auto min-h-0">
           <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
             
-            {/* 1. PROFILE & ACCOUNT */}
-            {activeTab === 'profile' && (
-              <div className="space-y-4">
-                <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <User size={18} className="text-[#FF2D88]" />
-                  Profile Details
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Display Name</label>
-                    <input
-                      type="text"
-                      value={profile.displayName}
-                      onChange={(e) => setProfile({ ...profile, displayName: e.target.value })}
-                      className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
+            {/* 1. EMAIL & PASSWORD */}
+            {activeTab === 'account' && (
+              <div className="space-y-8">
+                <div>
+                  <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                    <Mail 
+                      size={18} 
+                      style={{ color: appearance.accentColor }} 
                     />
-                  </div>
+                    Email Address Management
+                  </h2>
 
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Email Address</label>
-                    <input
-                      type="email"
-                      value={profile.email}
-                      onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-                      className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
-                    />
+                  <div className="space-y-4">
+
+                    {/* Current Email */}
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">
+                        Current Email
+                      </label>
+
+                      <input
+                        type="email"
+                        autoComplete="off"
+                        value={emailData.currentEmail}
+                        disabled
+                        className="w-full bg-[#121629]/50 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-gray-500 cursor-not-allowed"
+                      />
+                    </div>
+
+                    {/* New Email */}
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">
+                        New Email Address
+                      </label>
+
+                      <input
+                        type="email"
+                        autoComplete="off"
+                        value={emailData.newEmail}
+                        onChange={(e) =>
+                          setEmailData({
+                            ...emailData,
+                            newEmail: e.target.value
+                          })
+                        }
+                        className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                        placeholder="Enter new email"
+                      />
+                    </div>
+
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs text-gray-400 block mb-1">Team Role Tag</label>
-                  <input
-                    type="text"
-                    value={profile.role}
-                    onChange={(e) => setProfile({ ...profile, role: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
-                  />
-                </div>
+                <hr className="border-white/5" />
 
+                {/* Password Reset */}
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Public Bio</label>
-                  <textarea
-                    rows={3}
-                    value={profile.bio}
-                    onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#FF2D88] resize-none"
-                  />
+                  <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                    <Lock 
+                      size={18} 
+                      style={{ color: appearance.accentColor }} 
+                    />
+                    Password Reset
+                  </h2>
+
+                  <div className="space-y-4">
+
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">
+                        Current Password
+                      </label>
+
+                      <input
+                        type="password"
+                        value={passwordData.currentPassword}
+                        onChange={(e) =>
+                          setPasswordData({
+                            ...passwordData,
+                            currentPassword: e.target.value
+                          })
+                        }
+                        className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">
+                          New Password
+                        </label>
+
+                        <input
+                          type="password"
+                          value={passwordData.newPassword}
+                          onChange={(e) =>
+                            setPasswordData({
+                              ...passwordData,
+                              newPassword: e.target.value
+                            })
+                          }
+                          className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">
+                          Confirm New Password
+                        </label>
+
+                        <input
+                          type="password"
+                          value={passwordData.confirmPassword}
+                          onChange={(e) =>
+                            setPasswordData({
+                              ...passwordData,
+                              confirmPassword: e.target.value
+                            })
+                          }
+                          className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                        />
+                      </div>
+
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -157,37 +309,47 @@ export default function Settings() {
             {activeTab === 'appearance' && (
               <div className="space-y-4">
                 <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Palette size={18} className="text-[#FF2D88]" />
+                  <Palette 
+                    size={18} 
+                    style={{ color: appearance.accentColor }} 
+                  />
                   Theme & Layout
                 </h2>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-2">Accent Color Theme</label>
-                  <div className="flex items-center gap-3">
-                    {['#FF2D88', '#00F0FF', '#A855F7', '#22C55E'].map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setAppearance({ ...appearance, accentColor: color })}
-                        style={{ backgroundColor: color }}
-                        className={`w-8 h-8 rounded-full border-2 transition-transform ${
-                          appearance.accentColor === color ? 'border-white scale-110' : 'border-transparent opacity-80 hover:opacity-100'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-white/5 space-y-3">
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-[#121629] cursor-pointer">
-                    <span className="text-xs font-medium text-gray-200">Pin Sidebar by default</span>
-                    <input
-                      type="checkbox"
-                      checked={appearance.pinSidebarByDefault}
-                      onChange={(e) => setAppearance({ ...appearance, pinSidebarByDefault: e.target.checked })}
-                      className="accent-[#FF2D88] w-4 h-4 rounded"
-                    />
+                  <label className="text-xs text-gray-400 block mb-2">
+                    Custom Accent Color
                   </label>
+
+                  <div className="flex items-center gap-4">
+
+                    <div className="relative w-12 h-12 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg cursor-pointer hover:scale-105 transition-transform">
+
+                      <input
+                        type="color"
+                        value={appearance.accentColor}
+                        onChange={(e) =>
+                          setAppearance({
+                            ...appearance,
+                            accentColor: e.target.value
+                          })
+                        }
+                        className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer"
+                      />
+
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        Pick any color
+                      </p>
+
+                      <p className="text-xs text-gray-400 uppercase tracking-widest">
+                        {appearance.accentColor}
+                      </p>
+                    </div>
+
+                  </div>
                 </div>
               </div>
             )}
@@ -196,76 +358,124 @@ export default function Settings() {
             {activeTab === 'ai' && (
               <div className="space-y-4">
                 <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Bot size={18} className="text-[#FF2D88]" />
+                  <Bot 
+                    size={18} 
+                    style={{ color: appearance.accentColor }} 
+                  />
                   AI Assistant Settings
                 </h2>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Response Style</label>
+                  <label className="text-xs text-gray-400 block mb-1">
+                    Response Style
+                  </label>
+
                   <select
                     value={aiConfig.responseStyle}
-                    onChange={(e) => setAiConfig({ ...aiConfig, responseStyle: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
+                    onChange={(e) =>
+                      setAiConfig({
+                        ...aiConfig,
+                        responseStyle: e.target.value
+                      })
+                    }
+                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
                   >
-                    <option value="Concise">Concise & Direct (Fastest)</option>
-                    <option value="Detailed Code">Detailed Code & Step-by-Step</option>
-                    <option value="Creative">Creative Brainstorming</option>
+                    <option value="Concise">
+                      Concise & Direct
+                    </option>
+
+                    <option value="Detailed Code">
+                      Detailed & Analytical
+                    </option>
+
+                    <option value="Creative">
+                      Creative Brainstorming
+                    </option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Custom Greeting Phrase</label>
+                  <label className="text-xs text-gray-400 block mb-1">
+                    Custom Greeting Phrase
+                  </label>
+
                   <input
                     type="text"
                     value={aiConfig.customGreeting}
-                    onChange={(e) => setAiConfig({ ...aiConfig, customGreeting: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
+                    onChange={(e) =>
+                      setAiConfig({
+                        ...aiConfig,
+                        customGreeting: e.target.value
+                      })
+                    }
+                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                    placeholder="e.g. How can I help with your board today?"
                   />
                 </div>
               </div>
             )}
 
-            {/* 4. NOTIFICATIONS & REGION */}
+            {/* 4. LANGUAGE & REGION */}
             {activeTab === 'regional' && (
               <div className="space-y-4">
                 <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Bell size={18} className="text-[#FF2D88]" />
-                  Regional & Reminder Rules
+                  <Globe 
+                    size={18} 
+                    style={{ color: appearance.accentColor }} 
+                  />
+                  Language & Regional Rules
                 </h2>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">App Timezone</label>
+                  <label className="text-xs text-gray-400 block mb-1">
+                    Application Language
+                  </label>
+
                   <select
-                    value={regional.timezone}
-                    onChange={(e) => setRegional({ ...regional, timezone: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
+                    value={regional.language}
+                    onChange={(e) =>
+                      setRegional({
+                        ...regional,
+                        language: e.target.value
+                      })
+                    }
+                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
                   >
-                    <option value="Asia/Colombo (GMT+5:30)">Asia/Colombo (GMT+5:30)</option>
-                    <option value="UTC (GMT+0:00)">UTC (GMT+0:00)</option>
-                    <option value="America/New_York (GMT-5:00)">America/New_York (GMT-5:00)</option>
+                    {LANGUAGES.map(lang => (
+                      <option 
+                        key={lang.code} 
+                        value={lang.code}
+                      >
+                        {lang.label}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-[#121629] cursor-pointer">
-                    <span className="text-xs font-medium text-gray-200">Sri Lanka Public & Poya Day Reminders</span>
-                    <input
-                      type="checkbox"
-                      checked={regional.slHolidayAlerts}
-                      onChange={(e) => setRegional({ ...regional, slHolidayAlerts: e.target.checked })}
-                      className="accent-[#FF2D88] w-4 h-4 rounded"
-                    />
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">
+                    App Timezone
                   </label>
 
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-[#121629] cursor-pointer">
-                    <span className="text-xs font-medium text-gray-200">Task Due Notifications</span>
-                    <input
-                      type="checkbox"
-                      checked={regional.taskDueReminders}
-                      onChange={(e) => setRegional({ ...regional, taskDueReminders: e.target.checked })}
-                      className="accent-[#FF2D88] w-4 h-4 rounded"
-                    />
-                  </label>
+                  <select
+                    value={regional.timezone}
+                    onChange={(e) =>
+                      setRegional({
+                        ...regional,
+                        timezone: e.target.value
+                      })
+                    }
+                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
+                  >
+                    {TIMEZONES.map(tz => (
+                      <option 
+                        key={tz.value} 
+                        value={tz.value}
+                      >
+                        {tz.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -274,53 +484,98 @@ export default function Settings() {
             {activeTab === 'security' && (
               <div className="space-y-4">
                 <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Shield size={18} className="text-[#FF2D88]" />
-                  Security & Sharing Defaults
+                  <Shield 
+                    size={18} 
+                    style={{ color: appearance.accentColor }} 
+                  />
+                  Security & Sharing
                 </h2>
 
                 <div>
-                  <label className="text-xs text-gray-400 block mb-1">Default Link Permission for Shared Boards</label>
+                  <label className="text-xs text-gray-400 block mb-1">
+                    Default Share Role
+                  </label>
+
                   <select
                     value={security.defaultShareRole}
-                    onChange={(e) => setSecurity({ ...security, defaultShareRole: e.target.value })}
-                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-[#FF2D88]"
+                    onChange={(e) =>
+                      setSecurity({
+                        ...security,
+                        defaultShareRole: e.target.value
+                      })
+                    }
+                    className="w-full bg-[#121629] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-white/30"
                   >
-                    <option value="view">View Only</option>
-                    <option value="edit">Can Edit</option>
+                    <option value="view">
+                      View Only
+                    </option>
+
+                    <option value="edit">
+                      Can Edit
+                    </option>
                   </select>
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#121629] border border-white/5 flex items-center justify-between">
+
                   <div>
-                    <p className="text-xs font-medium text-white">Two-Factor Authentication (2FA)</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">Secure your account with an authenticator app</p>
+                    <p className="text-xs font-medium text-white">
+                      Two-Factor Authentication (2FA)
+                    </p>
+
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      Secure your account with authenticator apps
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    className="bg-white/10 hover:bg-white/20 text-xs text-white px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    Configure
-                  </button>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+
+                    <input
+                      type="checkbox"
+                      checked={security.twoFactorEnabled}
+                      onChange={(e) =>
+                        setSecurity({
+                          ...security,
+                          twoFactorEnabled: e.target.checked
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+
+                    <div 
+                      style={{
+                        backgroundColor:
+                          security.twoFactorEnabled
+                            ? appearance.accentColor
+                            : '#374151'
+                      }}
+                      className="w-11 h-6 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"
+                    />
+
+                  </label>
                 </div>
               </div>
             )}
 
             {/* Save Button */}
-            <div className="pt-6 border-t border-white/10 flex justify-end">
+            <div className="pt-6 border-t border-white/10 flex justify-end mt-8">
+
               <button
                 type="submit"
-                className="bg-[#FF2D88] hover:bg-[#FF2D88]/80 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-[#FF2D88]/20"
+                style={{
+                  backgroundColor: appearance.accentColor
+                }}
+                className="text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 shadow-lg"
               >
                 <Save size={16} />
                 <span>Save Changes</span>
               </button>
+
             </div>
 
           </form>
         </div>
-
       </div>
-
     </div>
   );
 }

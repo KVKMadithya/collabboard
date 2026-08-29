@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Notification = require('../models/Notification'); 
+const bcrypt = require('bcryptjs');
 
 // 1. Get Public Profile
 exports.getUserProfile = async (req, res) => {
@@ -65,19 +66,19 @@ exports.toggleFollow = async (req, res) => {
       targetUser.followers.push(currentUser._id);
       currentUser.following.push(targetUser._id);
 
-      // 🚀 Anti-Spam: Remove previous unread follow notifications from this user
+      // Anti-Spam: Remove previous unread follow notifications from this user
       await Notification.deleteMany({
         recipient: targetUser._id,
         sender: currentUser._id,
         type: 'follow'
       });
 
-      // 🚀 Fire Database Notification
+      // Fire Database Notification
       await Notification.create({
         recipient: targetUser._id,
         sender: currentUser._id,
         type: 'follow',
-        status: 'info', // 👈 Mark as info so it bypasses invite logic
+        status: 'info',
         message: `${currentUser.firstName} ${currentUser.lastName} started following you.`
       });
     }
@@ -121,19 +122,19 @@ exports.rateUser = async (req, res) => {
     const totalScore = targetUser.ratings.reduce((acc, curr) => acc + curr.score, 0);
     const averageRating = (totalScore / targetUser.ratings.length).toFixed(1);
 
-    // 🚀 Anti-Spam: Remove previous unread rating notifications
+    // Anti-Spam: Remove previous unread rating notifications
     await Notification.deleteMany({
       recipient: targetUser._id,
       sender: currentUser._id,
       type: 'rating'
     });
 
-    // 🚀 Fire Database Notification
+    // Fire Database Notification
     await Notification.create({
       recipient: targetUser._id,
       sender: currentUser._id,
       type: 'rating',
-      status: 'info', // 👈 Mark as info
+      status: 'info',
       message: `${currentUser.firstName} ${currentUser.lastName} rated your profile ${rating} stars.`
     });
 
@@ -141,5 +142,86 @@ exports.rateUser = async (req, res) => {
   } catch (error) {
     console.error("Error rating user:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// 4. Update User Email
+exports.updateEmail = async (req, res) => {
+  try {
+    const { newEmail } = req.body;
+
+    // Check if email is already in use by someone else
+    const emailExists = await User.findOne({ email: newEmail });
+    if (emailExists) {
+      return res.status(400).json({ message: 'Email is already in use.' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.email = newEmail;
+    await user.save();
+
+    res.status(200).json({ message: 'Email updated successfully', email: user.email });
+  } catch (error) {
+    console.error("Error updating email:", error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// 5. Update Password
+exports.updatePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user._id);
+
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Incorrect current password' });
+    }
+
+    // Hash the new password
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error("Error updating password:", error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// 6. Update App Preferences (Settings Panel)
+exports.updatePreferences = async (req, res) => {
+  try {
+    const preferences = req.body; 
+    
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $set: {
+          'preferences.accentColor': preferences.accentColor,
+          'preferences.language': preferences.language,
+          'preferences.timezone': preferences.timezone,
+          'preferences.aiResponseStyle': preferences.responseStyle,
+          'preferences.customGreeting': preferences.customGreeting,
+          'preferences.twoFactorEnabled': preferences.twoFactorEnabled,
+          'preferences.pinSidebarByDefault': preferences.pinSidebarByDefault,
+          'preferences.slHolidayAlerts': preferences.slHolidayAlerts,
+          'preferences.defaultShareRole': preferences.defaultShareRole,
+        }
+      },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({ 
+      message: 'Preferences saved successfully', 
+      preferences: updatedUser.preferences 
+    });
+  } catch (error) {
+    console.error("Error updating preferences:", error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
