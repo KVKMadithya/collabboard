@@ -8,6 +8,7 @@ import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
+import Reports from './pages/Reports';
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
 
@@ -121,6 +122,7 @@ function App() {
             <Route path="/notes" element={<Notes user={user} />} />
             <Route path="/ai-assistant" element={<AiAssistant />} />
             <Route path="/calendar" element={<Calendar />} />
+            <Route path="/reports" element={<Reports />} />
             <Route path="/members" element={<Members />} /> {/* <-- ADD THIS */}
           </Route>
 

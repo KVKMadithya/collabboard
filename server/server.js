@@ -18,6 +18,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
+app.use('/api/reports', require('./routes/reportRoutes'));
 
 // Import and mount the AI routes
 const aiRoutes = require('./routes/aiRoutes');
