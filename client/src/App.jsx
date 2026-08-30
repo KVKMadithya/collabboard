@@ -14,6 +14,7 @@ import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
 import GitFeed from './pages/GitFeed'; 
 import SearchList from './pages/SearchList';
+import Settings from './pages/Settings';
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -23,6 +24,35 @@ import Timeline from './pages/Timeline';
 // Global Contexts
 import { ThemeProvider } from './context/ThemeContext';
 import { ProjectProvider } from './context/ProjectContext'; 
+
+// 🛑 SYNCHRONOUS BOOT SEQUENCE
+// Runs instantly on hard refresh to prevent pink flashes
+const initializeGlobalState = () => {
+  try {
+    const prefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
+    
+    // 1. Instant Color Injection
+    if (prefs.accentColor) {
+      document.documentElement.style.setProperty('--theme-accent', prefs.accentColor);
+    }
+    
+    // 2. Aggressive Translation Cookie
+    if (prefs.language && prefs.language !== 'en') {
+      document.cookie = `googtrans=/en/${prefs.language}; path=/`;
+      if (typeof window !== 'undefined') {
+        document.cookie = `googtrans=/en/${prefs.language}; domain=${window.location.hostname}; path=/`;
+      }
+    } else {
+      document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+      if (typeof window !== 'undefined') {
+        document.cookie = `googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; domain=${window.location.hostname}; path=/;`;
+      }
+    }
+  } catch (e) {
+    console.error("Boot sequence error", e);
+  }
+};
+initializeGlobalState();
 
 const DashboardLayout = ({ user, onSignOut }) => {
   return (
@@ -45,6 +75,23 @@ function App() {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // --- GLOBAL TRANSLATE ENGINE SETUP ---
+  useEffect(() => {
+    if (!document.getElementById('google-translate-script')) {
+      const script = document.createElement('script');
+      script.id = 'google-translate-script';
+      script.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+      document.body.appendChild(script);
+
+      window.googleTranslateElementInit = () => {
+        new window.google.translate.TranslateElement({
+          pageLanguage: 'en',
+          autoDisplay: false 
+        }, 'google_translate_element');
+      };
+    }
+  }, []);
+
   const checkAuthStatus = async () => {
     setIsLoading(true);
     const token = localStorage.getItem('collab_token');
@@ -61,6 +108,19 @@ function App() {
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+
+        // 🛑 THE MISSING LINK: Sync backend data directly to the screen!
+        if (userData.preferences) {
+          localStorage.setItem('collab_preferences', JSON.stringify(userData.preferences));
+          
+          if (userData.preferences.accentColor) {
+            document.documentElement.style.setProperty('--theme-accent', userData.preferences.accentColor);
+          }
+          
+          if (userData.preferences.language && userData.preferences.language !== 'en') {
+            document.cookie = `googtrans=/en/${userData.preferences.language}; path=/`;
+          }
+        }
       } else {
         localStorage.removeItem('collab_token');
         setUser(null);
@@ -78,6 +138,9 @@ function App() {
 
   const handleSignOut = () => {
     localStorage.removeItem('collab_token');
+    localStorage.removeItem('collab_preferences'); 
+    document.documentElement.style.setProperty('--theme-accent', '#FF2D88'); 
+    document.cookie = "googtrans=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; 
     setUser(null); 
   };
 
@@ -85,7 +148,7 @@ function App() {
     return (
       <div className="flex h-screen w-full bg-theme-bg items-center justify-center text-theme-text font-sans transition-colors duration-300">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-theme-border border-t-[#FF2D88] rounded-full animate-spin"></div>
+          <div className="w-10 h-10 border-4 border-theme-border border-t-theme-accent rounded-full animate-spin"></div>
           <p className="text-theme-muted text-sm tracking-wide transition-colors duration-300">Loading workspace...</p>
         </div>
       </div>
@@ -96,8 +159,10 @@ function App() {
     <ThemeProvider>
       <ProjectProvider user={user}> 
         <BrowserRouter>
+          
+          <div id="google_translate_element" className="hidden"></div>
+          
           <Routes>
-
             <Route path="/auth" element={
               user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
             } />
@@ -107,14 +172,10 @@ function App() {
               user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
             }>
               <Route path="/" element={<Dashboard />} />
-
-              {/* Core Task & Project Management Routes */}
               <Route path="/board" element={<Tasks />} />
               <Route path="/tasks/new" element={<TaskForm />} />
               <Route path="/tasks/:id" element={<TaskDetail />} />
               <Route path="/timeline" element={<Timeline />} />
-
-              {/* Other App Features */}
               <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
               <Route path="/user/:id" element={<ViewProfile />} /> 
               <Route path="/notes" element={<Notes user={user} />} />
@@ -124,6 +185,7 @@ function App() {
               <Route path="/members" element={<Members />} /> 
               <Route path="/git" element={<GitFeed user={user} />} />
               <Route path="/search" element={<SearchList />} />
+              <Route path="/settings" element={<Settings />} />
             </Route>
 
           </Routes>

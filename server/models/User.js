@@ -14,10 +14,21 @@ const userSchema = new mongoose.Schema({
   ratings: [{
     rater: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     score: { type: Number, required: true }
-  }], 
+  }],
+  // 🛑 THE FIX: We formally introduce the preferences object to the database
+  preferences: {
+    accentColor: { type: String, default: '#FF2D88' },
+    language: { type: String, default: 'en' },
+    timezone: { type: String, default: 'Asia/Colombo (GMT+5:30)' },
+    customGreeting: { type: String, default: 'How can I help with your board today?' },
+    responseStyle: { type: String, default: 'Concise' },
+    defaultShareRole: { type: String, default: 'view' },
+    twoFactorEnabled: { type: Boolean, default: false },
+    pinSidebarByDefault: { type: Boolean, default: false }
+  }
 }, { timestamps: true });
 
-// Hash the password before saving (Removed 'next' because it is an async function)
+// Hash the password before saving
 userSchema.pre('save', async function () {
   if (!this.isModified('password') || !this.password) return;
   const salt = await bcrypt.genSalt(10);
