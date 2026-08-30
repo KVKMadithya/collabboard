@@ -9,7 +9,7 @@ import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
-import Reports from './pages/Reports';
+import Reports from './pages/Reports'; // 👈 Friend's new import
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
 import GitFeed from './pages/GitFeed'; 
@@ -102,21 +102,11 @@ function App() {
               user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
             } />
 
-<<<<<<< HEAD
-            {/* 👇 Other App Features */}
-            <Route path="/profile" element={<Profile user={user} toggleRefresh={checkAuthStatus} />} />
-            <Route path="/notes" element={<Notes user={user} />} />
-            <Route path="/ai-assistant" element={<AiAssistant />} />
-            <Route path="/calendar" element={<Calendar />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/members" element={<Members />} /> {/* <-- ADD THIS */}
-          </Route>
-=======
+            {/* 🛑 All protected routes are now cleanly inside the DashboardLayout wrapper */}
             <Route element={
               user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
             }>
               <Route path="/" element={<Dashboard />} />
->>>>>>> 83db1e098c77fe84c616d42e67eec2a582c71115
 
               {/* Core Task & Project Management Routes */}
               <Route path="/board" element={<Tasks />} />
@@ -130,6 +120,7 @@ function App() {
               <Route path="/notes" element={<Notes user={user} />} />
               <Route path="/ai-assistant" element={<AiAssistant />} />
               <Route path="/calendar" element={<Calendar />} />
+              <Route path="/reports" element={<Reports />} /> {/* 👈 Friend's new route safely integrated */}
               <Route path="/members" element={<Members />} /> 
               <Route path="/git" element={<GitFeed user={user} />} />
               <Route path="/search" element={<SearchList />} />

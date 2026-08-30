@@ -69,6 +69,7 @@ exports.deleteModule = async (req, res) => {
 
     removeFileFromDisk(mod.proposal?.filePath);
     removeFileFromDisk(mod.finalReport?.filePath);
+    removeFileFromDisk(mod.dataReport?.filePath);
 
     await mod.deleteOne();
     res.json({ message: 'Module deleted' });
@@ -78,12 +79,13 @@ exports.deleteModule = async (req, res) => {
 };
 
 // POST /api/reports/:id/upload  (multipart/form-data: file, docType)
-// Any signed-in user can upload/replace a Proposal or Final Report on any module.
+// Any signed-in user can upload/replace a Proposal, Final Report, or Data
+// Report on any module.
 exports.uploadDoc = async (req, res) => {
   try {
-    const { docType } = req.body; // 'proposal' | 'final'
-    if (!['proposal', 'final'].includes(docType)) {
-      return res.status(400).json({ message: 'docType must be "proposal" or "final"' });
+    const { docType } = req.body; // 'proposal' | 'final' | 'data'
+    if (!['proposal', 'final', 'data'].includes(docType)) {
+      return res.status(400).json({ message: 'docType must be "proposal", "final", or "data"' });
     }
     if (!req.file) {
       return res.status(400).json({ message: 'No file uploaded' });
@@ -106,7 +108,7 @@ exports.uploadDoc = async (req, res) => {
       uploadedAt: new Date(),
     };
 
-    const field = docType === 'proposal' ? 'proposal' : 'finalReport';
+    const field = docType === 'proposal' ? 'proposal' : docType === 'final' ? 'finalReport' : 'dataReport';
     removeFileFromDisk(mod[field]?.filePath); // replacing — clean up the old one
     mod[field] = fileEntry;
 
@@ -123,7 +125,7 @@ exports.renameDoc = async (req, res) => {
   try {
     const { docType } = req.params;
     const { name } = req.body;
-    if (!['proposal', 'final'].includes(docType)) {
+    if (!['proposal', 'final', 'data'].includes(docType)) {
       return res.status(400).json({ message: 'Invalid docType' });
     }
     if (!name || !name.trim()) {
@@ -133,7 +135,7 @@ exports.renameDoc = async (req, res) => {
     const mod = await ReportModule.findById(req.params.id);
     if (!mod) return res.status(404).json({ message: 'Module not found' });
 
-    const field = docType === 'proposal' ? 'proposal' : 'finalReport';
+    const field = docType === 'proposal' ? 'proposal' : docType === 'final' ? 'finalReport' : 'dataReport';
     if (!mod[field]) return res.status(404).json({ message: 'File not found' });
 
     mod[field].name = name.trim();
@@ -149,14 +151,14 @@ exports.renameDoc = async (req, res) => {
 exports.deleteDoc = async (req, res) => {
   try {
     const { docType } = req.params;
-    if (!['proposal', 'final'].includes(docType)) {
+    if (!['proposal', 'final', 'data'].includes(docType)) {
       return res.status(400).json({ message: 'Invalid docType' });
     }
 
     const mod = await ReportModule.findById(req.params.id);
     if (!mod) return res.status(404).json({ message: 'Module not found' });
 
-    const field = docType === 'proposal' ? 'proposal' : 'finalReport';
+    const field = docType === 'proposal' ? 'proposal' : docType === 'final' ? 'finalReport' : 'dataReport';
     removeFileFromDisk(mod[field]?.filePath);
     mod[field] = null;
 

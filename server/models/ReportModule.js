@@ -19,6 +19,7 @@ const reportModuleSchema = new mongoose.Schema({
   requireFinal: { type: Boolean, default: true },
   proposal: { type: fileSubSchema, default: null },
   finalReport: { type: fileSubSchema, default: null },
+  dataReport: { type: fileSubSchema, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('ReportModule', reportModuleSchema);

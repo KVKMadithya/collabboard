@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  FolderKanban, UploadCloud, CheckCircle2, AlertTriangle,
+  FolderKanban, UploadCloud, CheckCircle2,
   FileText, MoreVertical, Pencil, Trash2, X, Plus,
   UploadCloud as CloudIcon, Clock, Download, Check
 } from 'lucide-react';
@@ -52,6 +52,15 @@ function FileBadge({ doc }) {
   );
 }
 
+// Looks up the right file field for a doc kind — 'proposal' | 'final' | 'data'
+const getDoc = (mod, kind) => {
+  if (kind === 'proposal') return mod?.proposal;
+  if (kind === 'final') return mod?.finalReport;
+  return mod?.dataReport;
+};
+
+const kindLabel = (kind) => (kind === 'proposal' ? 'Project Proposal' : kind === 'final' ? 'Final Report' : 'Data Report');
+
 export default function Reports() {
   const [modules, setModules] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +71,7 @@ export default function Reports() {
 
   // Upload panel state
   const [uploadModuleId, setUploadModuleId] = useState(null);
-  const [docType, setDocType] = useState('proposal'); // 'proposal' | 'final'
+  const [docType, setDocType] = useState('proposal'); // 'proposal' | 'final' | 'data'
   const [pendingFile, setPendingFile] = useState(null);
 
   // Add module form state
@@ -76,6 +85,20 @@ export default function Reports() {
   // Custom delete confirmation (replaces window.confirm)
   // shape: { type: 'module', id, name } | { type: 'doc', moduleId, kind, name }
   const [confirmDelete, setConfirmDelete] = useState(null);
+
+  // Confirmation shown when the chosen module + doc type already has a file —
+  // shape: { moduleId, kind, file, existingName, moduleName }
+  const [confirmUpload, setConfirmUpload] = useState(null);
+
+  // Set whenever an upload request fails, so the panel can show *why*
+  // instead of silently doing nothing.
+  const [uploadError, setUploadError] = useState(null);
+
+  // Clicking a "Recently uploaded" item scrolls to and flashes the matching
+  // doc slot in the module list below. Keyed by `${moduleId}-${kind}`.
+  const [highlightKey, setHighlightKey] = useState(null);
+  const docSlotRefs = useRef({});
+  const highlightTimeoutRef = useRef(null);
 
   const fileInputRef = useRef(null);
 
@@ -107,12 +130,13 @@ export default function Reports() {
   const totalModules = modules.length;
   const proposalsUploaded = modules.filter(m => m.proposal).length;
   const finalsUploaded = modules.filter(m => m.finalReport).length;
-  const pendingFinals = modules.filter(m => m.requireFinal !== false && !m.finalReport).length;
+  const dataReportsUploaded = modules.filter(m => m.dataReport).length;
 
   const recentlyUploaded = modules
     .flatMap(m => [
-      m.proposal && { ...m.proposal, module: m.name, kind: 'proposal' },
-      m.finalReport && { ...m.finalReport, module: m.name, kind: 'final' },
+      m.proposal && { ...m.proposal, module: m.name, kind: 'proposal', moduleId: m._id },
+      m.finalReport && { ...m.finalReport, module: m.name, kind: 'final', moduleId: m._id },
+      m.dataReport && { ...m.dataReport, module: m.name, kind: 'data', moduleId: m._id },
     ])
     .filter(Boolean)
     .sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0))
@@ -213,7 +237,7 @@ export default function Reports() {
 
   const handleRenameDoc = (moduleId, kind) => {
     const mod = modules.find(m => m._id === moduleId);
-    const doc = kind === 'proposal' ? mod?.proposal : mod?.finalReport;
+    const doc = getDoc(mod, kind);
     setRenameValue(doc?.name || '');
     setRenamingDocKey(`${moduleId}-${kind}`);
     setOpenMenu(null);
@@ -248,29 +272,81 @@ export default function Reports() {
     if (file) setPendingFile(file);
   };
 
-  const handleConfirmUpload = async () => {
-    if (!uploadModuleId || !pendingFile) return;
+  // Shared upload call — the backend deletes whatever was in that slot and
+  // saves the new file, so this works whether or not one already exists.
+  const uploadFile = async (moduleId, kind, file) => {
+    if (!moduleId || !file) return false;
     try {
       const formData = new FormData();
-      formData.append('file', pendingFile);
-      formData.append('docType', docType);
-      const res = await fetch(`${API_BASE}/${uploadModuleId}/upload`, {
+      formData.append('file', file);
+      formData.append('docType', kind);
+      const res = await fetch(`${API_BASE}/${moduleId}/upload`, {
         method: 'POST',
         headers: authHeaders(), // do NOT set Content-Type — browser sets the multipart boundary
         body: formData,
       });
       if (res.ok) {
         const updated = await res.json();
-        setModules(prev => prev.map(m => (m._id === uploadModuleId ? updated : m)));
-        setPendingFile(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      } else {
-        const errBody = await res.json().catch(() => ({}));
-        console.error('Upload failed:', errBody.message);
+        setModules(prev => prev.map(m => (m._id === moduleId ? updated : m)));
+        setUploadError(null);
+        return true;
       }
+      const errBody = await res.json().catch(() => ({}));
+      const message = errBody.message || `Upload failed (HTTP ${res.status})`;
+      console.error('Upload failed:', message);
+      setUploadError(message);
+      return false;
     } catch (err) {
       console.error('Failed to upload document:', err);
+      setUploadError('Could not reach the server. Please try again.');
+      return false;
     }
+  };
+
+  // Clicking "Upload document" — if that module's slot is already occupied,
+  // stage a confirmation instead of uploading right away. Confirming replaces
+  // the file; canceling leaves the existing file untouched.
+  const handleConfirmUpload = () => {
+    if (!uploadModuleId || !pendingFile) return;
+    setUploadError(null);
+    const mod = modules.find(m => m._id === uploadModuleId);
+    const existing = getDoc(mod, docType);
+
+    if (existing) {
+      setConfirmUpload({
+        moduleId: uploadModuleId,
+        kind: docType,
+        file: pendingFile,
+        existingName: existing.name,
+        moduleName: mod?.name || '',
+      });
+      return;
+    }
+    performUpload(uploadModuleId, docType, pendingFile);
+  };
+
+  // Actually sends the file — used both for a fresh upload and after the
+  // replace confirmation is accepted.
+  const performUpload = async (moduleId, kind, file) => {
+    const ok = await uploadFile(moduleId, kind, file);
+    if (ok) {
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmedReplace = () => {
+    if (!confirmUpload) return;
+    performUpload(confirmUpload.moduleId, confirmUpload.kind, confirmUpload.file);
+    setConfirmUpload(null);
+  };
+
+  const handleCancelReplace = () => {
+    // Leave the existing file exactly as it is — just drop the staged file.
+    setConfirmUpload(null);
+    setPendingFile(null);
+    setUploadError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDrop = (e) => {
@@ -283,9 +359,9 @@ export default function Reports() {
     stageFile(e.target.files?.[0]);
   };
 
-  const handleDownloadDoc = async (moduleId, kind) => {
-    const mod = modules.find(m => m._id === moduleId);
-    const doc = kind === 'proposal' ? mod?.proposal : mod?.finalReport;
+  // Shared download — takes a doc object directly (name + filePath) so it
+  // works both for a module's doc slot and for the Recently Uploaded feed.
+  const downloadFile = async (doc) => {
     if (!doc) return;
     try {
       const res = await fetch(`${FILE_BASE}${doc.filePath}`);
@@ -301,6 +377,23 @@ export default function Reports() {
     } catch (err) {
       console.error('Failed to download file:', err);
     }
+  };
+
+  const handleDownloadDoc = async (moduleId, kind) => {
+    const mod = modules.find(m => m._id === moduleId);
+    const doc = getDoc(mod, kind);
+    await downloadFile(doc);
+  };
+
+  // Clicking a "Recently uploaded" item — scroll to that file's card in the
+  // module list and flash-highlight it twice so it's easy to spot.
+  const handleRecentClick = (f) => {
+    const key = `${f.moduleId}-${f.kind}`;
+    const el = docSlotRefs.current[key];
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    window.clearTimeout(highlightTimeoutRef.current);
+    setHighlightKey(key);
+    highlightTimeoutRef.current = window.setTimeout(() => setHighlightKey(null), 450);
   };
 
   if (isLoading) {
@@ -325,15 +418,16 @@ export default function Reports() {
         <div>
           <h1 className="text-2xl font-bold mb-1">Reports</h1>
           <p className="text-sm text-gray-400">
-            Upload and manage <span className="font-semibold text-gray-200">project proposals</span> and{' '}
-            <span className="font-semibold text-gray-200">final reports</span> for each module — visible and editable by everyone on the team
+            Upload and manage <span className="font-semibold text-gray-200">project proposals</span>,{' '}
+            <span className="font-semibold text-gray-200">final reports</span> and{' '}
+            <span className="font-semibold text-gray-200">data reports</span> for each report — visible and editable by everyone on the team
           </p>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); setShowAddModal(true); }}
           className="bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-[0_4px_14px_rgba(255,45,136,0.3)] transition-all hover:-translate-y-0.5 flex-shrink-0"
         >
-          <Plus size={18} /> Add new module
+          <Plus size={18} /> Add new reports
         </button>
       </div>
 
@@ -343,7 +437,7 @@ export default function Reports() {
           <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500"><FolderKanban size={20} /></div>
           <div>
             <h3 className="text-xl font-bold">{totalModules}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Modules tracked</p>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Module Reports</p>
           </div>
         </div>
         <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
@@ -361,10 +455,10 @@ export default function Reports() {
           </div>
         </div>
         <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
-          <div className="w-10 h-10 rounded-lg bg-yellow-500/10 flex items-center justify-center text-yellow-500"><AlertTriangle size={20} /></div>
+          <div className="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500"><FileText size={20} /></div>
           <div>
-            <h3 className="text-xl font-bold">{pendingFinals}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Pending final reports</p>
+            <h3 className="text-xl font-bold">{dataReportsUploaded}</h3>
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Data reports uploaded</p>
           </div>
         </div>
       </div>
@@ -381,8 +475,8 @@ export default function Reports() {
           )}
 
           {modules.map((m) => {
-            const total = m.requireFinal === false ? 1 : 2;
-            const done = (m.proposal ? 1 : 0) + (m.finalReport ? 1 : 0);
+            const total = 3;
+            const done = (m.proposal ? 1 : 0) + (m.finalReport ? 1 : 0) + (m.dataReport ? 1 : 0);
             return (
               <div key={m._id} className="bg-[#121629] border border-white/10 rounded-xl p-5 shadow-sm relative">
                 <div className="flex items-start justify-between mb-4">
@@ -407,7 +501,7 @@ export default function Reports() {
                           <button onClick={(e) => { e.stopPropagation(); cancelRenameModule(); }} className="text-gray-400 hover:text-red-400 p-1"><X size={15} /></button>
                         </div>
                       ) : (
-                        <h4 className="font-bold text-sm">{m.name}</h4>
+                        <h4 className="font-bold text-sm">{m.name} Reports</h4>
                       )}
                       <p className="text-xs text-gray-400 mt-0.5">{m.description}</p>
                     </div>
@@ -436,7 +530,7 @@ export default function Reports() {
                             onClick={() => handleRenameModule(m._id)}
                             className="w-full flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-white/5 transition-colors"
                           >
-                            <Pencil size={14} /> Rename module
+                            <Pencil size={14} /> Rename
                           </button>
                           <button
                             onClick={() => { setConfirmDelete({ type: 'module', id: m._id, name: m.name }); setOpenMenu(null); }}
@@ -450,135 +544,85 @@ export default function Reports() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Proposal slot */}
-                  <div className="bg-[#121629] border border-white/5 rounded-lg p-3 flex items-center justify-between gap-2">
-                    {m.proposal ? (
-                      <>
-                        <div className="flex items-center gap-3 min-w-0">
-                          <FileBadge doc={m.proposal} />
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Project Proposal</p>
-                            {renamingDocKey === `${m._id}-proposal` ? (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <input
-                                  type="text"
-                                  value={renameValue}
-                                  onChange={(e) => setRenameValue(e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') commitRenameDoc(m._id, 'proposal');
-                                    if (e.key === 'Escape') cancelRenameDoc();
-                                  }}
-                                  autoFocus
-                                  className="bg-[#121629] border border-[#FF2D88]/50 rounded-md px-2 py-0.5 text-sm font-medium focus:outline-none w-full min-w-0"
-                                />
-                                <button onClick={(e) => { e.stopPropagation(); commitRenameDoc(m._id, 'proposal'); }} className="text-green-500 hover:text-green-400 p-1 flex-shrink-0"><Check size={14} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); cancelRenameDoc(); }} className="text-gray-400 hover:text-red-400 p-1 flex-shrink-0"><X size={14} /></button>
-                              </div>
-                            ) : (
-                              <p className="text-sm font-medium truncate">{m.proposal.name}</p>
-                            )}
-                            <p className="text-[11px] text-gray-500">{formatFileSize(m.proposal.size)} · Uploaded {timeAgo(m.proposal.uploadedAt)}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDownloadDoc(m._id, 'proposal'); }}
-                            title="Download"
-                            className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                          >
-                            <Download size={15} />
-                          </button>
-                          <div className="relative">
-                            <button onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `${m._id}-proposal` ? null : `${m._id}-proposal`); }} className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors">
-                              <MoreVertical size={15} />
-                            </button>
-                            {openMenu === `${m._id}-proposal` && (
-                              <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-36 bg-[#121629] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 text-sm">
-                                <button onClick={() => handleRenameDoc(m._id, 'proposal')} className="w-full flex items-center gap-2 px-3 py-2.5 text-gray-200 hover:bg-white/5"><Pencil size={13} /> Rename</button>
-                                <button onClick={() => { setConfirmDelete({ type: 'doc', moduleId: m._id, kind: 'proposal', name: m.proposal.name }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-white/5"><Trash2 size={13} /> Delete</button>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center gap-3 text-gray-500 w-full">
-                        <div className="w-9 h-9 rounded-lg border-2 border-dashed border-white/10 flex items-center justify-center flex-shrink-0"><Plus size={16} /></div>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-wider">Project Proposal</p>
-                          <p className="text-sm">Not uploaded yet</p>
+                {(() => {
+                  // Renders one doc's card — only called for docs that actually exist.
+                  const docSlot = (kind, label, doc) => (
+                    <div
+                      key={kind}
+                      ref={(el) => { docSlotRefs.current[`${m._id}-${kind}`] = el; }}
+                      className={`flex-1 min-w-0 bg-[#121629] border border-white/5 rounded-lg p-3 flex items-center justify-between gap-2 ${
+                        highlightKey === `${m._id}-${kind}` ? 'reports-highlight-flash' : ''
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileBadge doc={doc} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{label}</p>
+                          {renamingDocKey === `${m._id}-${kind}` ? (
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <input
+                                type="text"
+                                value={renameValue}
+                                onChange={(e) => setRenameValue(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') commitRenameDoc(m._id, kind);
+                                  if (e.key === 'Escape') cancelRenameDoc();
+                                }}
+                                autoFocus
+                                className="bg-[#121629] border border-[#FF2D88]/50 rounded-md px-2 py-0.5 text-sm font-medium focus:outline-none w-full min-w-0"
+                              />
+                              <button onClick={(e) => { e.stopPropagation(); commitRenameDoc(m._id, kind); }} className="text-green-500 hover:text-green-400 p-1 flex-shrink-0"><Check size={14} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); cancelRenameDoc(); }} className="text-gray-400 hover:text-red-400 p-1 flex-shrink-0"><X size={14} /></button>
+                            </div>
+                          ) : (
+                            <p className="text-sm font-medium truncate">{doc.name}</p>
+                          )}
+                          <p className="text-[11px] text-gray-500">{formatFileSize(doc.size)} · Uploaded {timeAgo(doc.uploadedAt)}</p>
                         </div>
                       </div>
-                    )}
-                  </div>
-
-                  {/* Final report slot */}
-                  {m.requireFinal !== false && (
-                    <div className="bg-[#121629] border border-white/5 rounded-lg p-3 flex items-center justify-between gap-2">
-                      {m.finalReport ? (
-                        <>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <FileBadge doc={m.finalReport} />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Final Report</p>
-                              {renamingDocKey === `${m._id}-final` ? (
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  <input
-                                    type="text"
-                                    value={renameValue}
-                                    onChange={(e) => setRenameValue(e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') commitRenameDoc(m._id, 'final');
-                                      if (e.key === 'Escape') cancelRenameDoc();
-                                    }}
-                                    autoFocus
-                                    className="bg-[#121629] border border-[#FF2D88]/50 rounded-md px-2 py-0.5 text-sm font-medium focus:outline-none w-full min-w-0"
-                                  />
-                                  <button onClick={(e) => { e.stopPropagation(); commitRenameDoc(m._id, 'final'); }} className="text-green-500 hover:text-green-400 p-1 flex-shrink-0"><Check size={14} /></button>
-                                  <button onClick={(e) => { e.stopPropagation(); cancelRenameDoc(); }} className="text-gray-400 hover:text-red-400 p-1 flex-shrink-0"><X size={14} /></button>
-                                </div>
-                              ) : (
-                                <p className="text-sm font-medium truncate">{m.finalReport.name}</p>
-                              )}
-                              <p className="text-[11px] text-gray-500">{formatFileSize(m.finalReport.size)} · Uploaded {timeAgo(m.finalReport.uploadedAt)}</p>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDownloadDoc(m._id, kind); }}
+                          title="Download"
+                          className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                        >
+                          <Download size={15} />
+                        </button>
+                        <div className="relative">
+                          <button onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `${m._id}-${kind}` ? null : `${m._id}-${kind}`); }} className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                            <MoreVertical size={15} />
+                          </button>
+                          {openMenu === `${m._id}-${kind}` && (
+                            <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-36 bg-[#121629] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 text-sm">
+                              <button onClick={() => handleRenameDoc(m._id, kind)} className="w-full flex items-center gap-2 px-3 py-2.5 text-gray-200 hover:bg-white/5"><Pencil size={13} /> Rename</button>
+                              <button onClick={() => { setConfirmDelete({ type: 'doc', moduleId: m._id, kind, name: doc.name }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-white/5"><Trash2 size={13} /> Delete</button>
                             </div>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleDownloadDoc(m._id, 'final'); }}
-                              title="Download"
-                              className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                            >
-                              <Download size={15} />
-                            </button>
-                            <div className="relative">
-                              <button onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `${m._id}-final` ? null : `${m._id}-final`); }} className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors">
-                                <MoreVertical size={15} />
-                              </button>
-                              {openMenu === `${m._id}-final` && (
-                                <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-36 bg-[#121629] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 text-sm">
-                                  <button onClick={() => handleRenameDoc(m._id, 'final')} className="w-full flex items-center gap-2 px-3 py-2.5 text-gray-200 hover:bg-white/5"><Pencil size={13} /> Rename</button>
-                                  <button onClick={() => { setConfirmDelete({ type: 'doc', moduleId: m._id, kind: 'final', name: m.finalReport.name }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-white/5"><Trash2 size={13} /> Delete</button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex items-center gap-3 text-gray-500 w-full">
-                          <div className="w-9 h-9 rounded-lg border-2 border-dashed border-white/10 flex items-center justify-center flex-shrink-0"><Plus size={16} /></div>
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-wider">Final Report</p>
-                            <p className="text-sm">Not uploaded yet</p>
-                          </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
-                  )}
-                </div>
+                  );
+
+                  // Only include slots that actually have a file — the bar
+                  // evenly divides among however many are present (1, 2, or 3).
+                  const slots = [
+                    m.proposal && docSlot('proposal', 'Project Proposal', m.proposal),
+                    m.finalReport && docSlot('final', 'Final Report', m.finalReport),
+                    m.dataReport && docSlot('data', 'Data Report', m.dataReport),
+                  ].filter(Boolean);
+
+                  if (slots.length === 0) {
+                    return (
+                      <div className="bg-[#121629] border border-white/5 rounded-lg p-4 flex items-center gap-3 text-gray-500">
+                        <div className="w-9 h-9 rounded-lg border-2 border-dashed border-white/10 flex items-center justify-center flex-shrink-0"><Plus size={16} /></div>
+                        <p className="text-sm">No reports uploaded yet — use the panel to add a Project Proposal, Final Report, or Data Report.</p>
+                      </div>
+                    );
+                  }
+
+                  return <div className="flex flex-col sm:flex-row gap-3">{slots}</div>;
+                })()}
               </div>
             );
           })}
@@ -588,8 +632,8 @@ export default function Reports() {
             onClick={(e) => { e.stopPropagation(); setShowAddModal(true); }}
             className="w-full border-2 border-dashed border-white/10 rounded-xl py-6 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#FF2D88] hover:border-[#FF2D88]/40 transition-colors"
           >
-            <span className="flex items-center gap-2 font-bold text-sm"><Plus size={16} /> Add a new module</span>
-            <span className="text-xs">Track proposals and final reports for another module</span>
+            <span className="flex items-center gap-2 font-bold text-sm"><Plus size={16} /> Add new reports</span>
+            <span className="text-xs">Track proposals, final reports and data reports for another report</span>
           </button>
         </div>
 
@@ -597,11 +641,11 @@ export default function Reports() {
         <div className="space-y-8 overflow-y-auto custom-scrollbar pb-4 pr-1" onClick={(e) => e.stopPropagation()}>
           <div className="bg-[#121629] border border-white/10 rounded-2xl p-6 shadow-sm">
             <h2 className="text-lg font-bold mb-1">Upload a document</h2>
-            <p className="text-xs text-gray-400 mb-5">Attach a proposal or final report to a module</p>
+            <p className="text-xs text-gray-400 mb-5">Attach a proposal, final report, or data report to a report</p>
 
             <div className="space-y-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Module</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Report</label>
                 <select
                   value={uploadModuleId ?? ''}
                   onChange={(e) => setUploadModuleId(e.target.value)}
@@ -609,13 +653,13 @@ export default function Reports() {
                   className="w-full bg-[#121629] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#FF2D88] appearance-none cursor-pointer disabled:opacity-50"
                 >
                   {modules.length === 0 && <option value="">No modules yet</option>}
-                  {modules.map(m => <option key={m._id} value={m._id}>{m.name}</option>)}
+                  {modules.map(m => <option key={m._id} value={m._id}>{m.name} Report</option>)}
                 </select>
               </div>
 
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Document type</label>
-                <div className="grid grid-cols-2 gap-2 bg-[#121629] p-1 rounded-xl border border-white/10">
+                <div className="grid grid-cols-3 gap-2 bg-[#121629] p-1 rounded-xl border border-white/10">
                   <button
                     onClick={() => setDocType('proposal')}
                     className={`py-2.5 rounded-lg text-xs font-bold transition-colors ${
@@ -631,6 +675,14 @@ export default function Reports() {
                     }`}
                   >
                     Final Report
+                  </button>
+                  <button
+                    onClick={() => setDocType('data')}
+                    className={`py-2.5 rounded-lg text-xs font-bold transition-colors ${
+                      docType === 'data' ? 'bg-gradient-to-r from-purple-600 to-[#FF2D88] text-white shadow' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Data Report
                   </button>
                 </div>
               </div>
@@ -663,6 +715,9 @@ export default function Reports() {
               >
                 <UploadCloud size={18} /> Upload document
               </button>
+              {uploadError && (
+                <p className="text-xs text-red-400 text-center -mt-2">{uploadError}</p>
+              )}
             </div>
           </div>
 
@@ -670,7 +725,12 @@ export default function Reports() {
             <h2 className="text-lg font-bold mb-4">Recently uploaded</h2>
             <div className="space-y-2">
               {recentlyUploaded.map((f, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-[#121629] border border-white/5 rounded-xl p-3">
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleRecentClick(f)}
+                  className="w-full flex items-center gap-3 bg-[#121629] border border-white/5 rounded-xl p-3 text-left hover:border-white/20 hover:bg-white/5 transition-colors"
+                >
                   <FileBadge doc={f} />
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{f.name}</p>
@@ -678,7 +738,7 @@ export default function Reports() {
                       {f.module} <span className="mx-0.5">·</span> <Clock size={10} /> {timeAgo(f.uploadedAt)}
                     </p>
                   </div>
-                </div>
+                </button>
               ))}
               {recentlyUploaded.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-6">Nothing uploaded yet.</p>
@@ -696,16 +756,16 @@ export default function Reports() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-1">
-              <h2 className="text-lg font-bold text-white">Add a new module</h2>
+              <h2 className="text-lg font-bold text-white">Add a new report</h2>
               <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white p-1">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-gray-400 mb-6">Track proposals and final reports for a new part of your project</p>
+            <p className="text-xs text-gray-400 mb-6">Track proposals, final reports, and data reports for a new part of your project</p>
 
             <div className="space-y-5">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Module name</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">MODULE REPORT</label>
                 <input
                   type="text"
                   value={newModule.name}
@@ -720,7 +780,7 @@ export default function Reports() {
                 <textarea
                   value={newModule.description}
                   onChange={(e) => setNewModule(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Briefly describe the scope of this module..."
+                  placeholder="Briefly describe the scope of this report..."
                   rows={2}
                   className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF2D88] resize-none"
                 />
@@ -762,7 +822,7 @@ export default function Reports() {
                   disabled={!newModule.name.trim()}
                   className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                 >
-                  <Plus size={16} /> Create module
+                  <Plus size={16} /> Create report
                 </button>
               </div>
             </div>
@@ -803,6 +863,51 @@ export default function Reports() {
           </div>
         </div>
       )}
+
+      {/* --- Confirm Replace Modal (shown when the chosen slot already has a file) --- */}
+      {confirmUpload && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleCancelReplace}>
+          <div
+            className="bg-[#121629] border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-white mb-2">Replace existing file?</h2>
+            <p className="text-sm text-gray-400 mb-6">
+              <span className="text-gray-200 font-medium">{confirmUpload.moduleName} Report</span> already has a{' '}
+              {kindLabel(confirmUpload.kind)} —{' '}
+              <span className="text-gray-200 font-medium">{confirmUpload.existingName}</span>. Uploading{' '}
+              <span className="text-gray-200 font-medium">{confirmUpload.file?.name}</span> will replace it.
+              This can&apos;t be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleCancelReplace}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-300 border border-white/10 hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmedReplace}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 transition-all flex items-center justify-center gap-2"
+              >
+                <UploadCloud size={16} /> Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fast multi-flash highlight animation used to draw attention to a doc
+          slot when jumping to it from "Recently uploaded" */}
+      <style>{`
+        @keyframes reportsHighlightFlash {
+          0%, 100% { background-color: transparent; box-shadow: none; }
+          50% { background-color: rgba(255, 45, 136, 0.22); box-shadow: 0 0 0 2px rgba(255, 45, 136, 0.65); }
+        }
+        .reports-highlight-flash {
+          animation: reportsHighlightFlash 0.18s ease-in-out 2;
+        }
+      `}</style>
     </div>
   );
 }
