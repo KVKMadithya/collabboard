@@ -9,12 +9,13 @@ import Notes from './pages/Notes';
 import Dashboard from './pages/Dashboard';
 import AiAssistant from './pages/AiAssistant';
 import Calendar from './pages/Calendar';
-import Reports from './pages/Reports'; // 👈 Friend's new import
+import Reports from './pages/Reports'; 
 import Tasks from './pages/Tasks';
 import Members from './pages/Members'; 
 import GitFeed from './pages/GitFeed'; 
 import SearchList from './pages/SearchList';
 import Settings from './pages/Settings';
+import ProgressionMap from './pages/ProgressionMap'; // 👈 Added the Progression Map import
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -26,17 +27,14 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ProjectProvider } from './context/ProjectContext'; 
 
 // 🛑 SYNCHRONOUS BOOT SEQUENCE
-// Runs instantly on hard refresh to prevent pink flashes
 const initializeGlobalState = () => {
   try {
     const prefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
     
-    // 1. Instant Color Injection
     if (prefs.accentColor) {
       document.documentElement.style.setProperty('--theme-accent', prefs.accentColor);
     }
     
-    // 2. Aggressive Translation Cookie
     if (prefs.language && prefs.language !== 'en') {
       document.cookie = `googtrans=/en/${prefs.language}; path=/`;
       if (typeof window !== 'undefined') {
@@ -109,7 +107,6 @@ function App() {
         const userData = await response.json();
         setUser(userData);
 
-        // 🛑 THE MISSING LINK: Sync backend data directly to the screen!
         if (userData.preferences) {
           localStorage.setItem('collab_preferences', JSON.stringify(userData.preferences));
           
@@ -167,7 +164,6 @@ function App() {
               user ? <Navigate to="/" /> : <Auth onLoginSuccess={checkAuthStatus} />
             } />
 
-            {/* 🛑 All protected routes are now cleanly inside the DashboardLayout wrapper */}
             <Route element={
               user ? <DashboardLayout user={user} onSignOut={handleSignOut} /> : <Navigate to="/auth" />
             }>
@@ -181,11 +177,14 @@ function App() {
               <Route path="/notes" element={<Notes user={user} />} />
               <Route path="/ai-assistant" element={<AiAssistant />} />
               <Route path="/calendar" element={<Calendar />} />
-              <Route path="/reports" element={<Reports />} /> {/* 👈 Friend's new route safely integrated */}
+              <Route path="/reports" element={<Reports />} /> 
               <Route path="/members" element={<Members />} /> 
               <Route path="/git" element={<GitFeed user={user} />} />
               <Route path="/search" element={<SearchList />} />
               <Route path="/settings" element={<Settings />} />
+              
+              {/* 🛑 NEW ROUTE: Progression Map integrated securely */}
+              <Route path="/progression" element={<ProgressionMap />} />
             </Route>
 
           </Routes>

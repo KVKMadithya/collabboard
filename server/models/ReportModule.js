@@ -13,6 +13,7 @@ const fileSubSchema = new mongoose.Schema({
 }, { _id: false });
 
 const reportModuleSchema = new mongoose.Schema({
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
   name: { type: String, required: true },
   description: { type: String, default: '' },
   color: { type: String, default: '#A855F7' },

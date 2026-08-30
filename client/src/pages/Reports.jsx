@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom'; // 👈 Added for the "Go to Workspaces" button
 import {
   FolderKanban, UploadCloud, CheckCircle2,
   FileText, MoreVertical, Pencil, Trash2, X, Plus,
-  UploadCloud as CloudIcon, Clock, Download, Check
+  UploadCloud as CloudIcon, Clock, Download, Check, AlertCircle, Briefcase
 } from 'lucide-react';
+import { useProject } from '../context/ProjectContext';
 
 const API_BASE = 'http://127.0.0.1:5000/api/reports';
 const FILE_BASE = 'http://127.0.0.1:5000';
 
 const COLOR_OPTIONS = ['#A855F7', '#EC4899', '#F43F5E', '#3B82F6', '#10B981', '#F59E0B'];
 
-// --- Small display helpers ---
+// --- Display Helpers ---
 const timeAgo = (dateInput) => {
   if (!dateInput) return '';
   const diffMs = Date.now() - new Date(dateInput).getTime();
@@ -44,15 +46,14 @@ const getFileKind = (doc) => {
 function FileBadge({ doc }) {
   const isDoc = getFileKind(doc) === 'docx';
   return (
-    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-      isDoc ? 'bg-blue-500/10 text-blue-500' : 'bg-red-500/10 text-red-500'
+    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm ${
+      isDoc ? 'bg-blue-500/10 text-blue-500 border border-blue-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'
     }`}>
       <FileText size={18} />
     </div>
   );
 }
 
-// Looks up the right file field for a doc kind — 'proposal' | 'final' | 'data'
 const getDoc = (mod, kind) => {
   if (kind === 'proposal') return mod?.proposal;
   if (kind === 'final') return mod?.finalReport;
@@ -62,44 +63,37 @@ const getDoc = (mod, kind) => {
 const kindLabel = (kind) => (kind === 'proposal' ? 'Project Proposal' : kind === 'final' ? 'Final Report' : 'Data Report');
 
 export default function Reports() {
+  // --- Context & Navigation ---
+  const { activeProject } = useProject(); 
+  const navigate = useNavigate();
+
   const [modules, setModules] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [openMenu, setOpenMenu] = useState(null); // `module-${id}` | `${id}-proposal` | `${id}-final` — only one open at a time
+  const [openMenu, setOpenMenu] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   // Upload panel state
   const [uploadModuleId, setUploadModuleId] = useState(null);
-  const [docType, setDocType] = useState('proposal'); // 'proposal' | 'final' | 'data'
+  const [docType, setDocType] = useState('proposal');
   const [pendingFile, setPendingFile] = useState(null);
 
   // Add module form state
   const [newModule, setNewModule] = useState({ name: '', description: '', color: COLOR_OPTIONS[1], requireFinal: true });
 
-  // Inline rename state (module or doc name currently being edited)
+  // Inline rename state
   const [renamingModuleId, setRenamingModuleId] = useState(null);
   const [renamingDocKey, setRenamingDocKey] = useState(null);
   const [renameValue, setRenameValue] = useState('');
 
-  // Custom delete confirmation (replaces window.confirm)
-  // shape: { type: 'module', id, name } | { type: 'doc', moduleId, kind, name }
   const [confirmDelete, setConfirmDelete] = useState(null);
-
-  // Confirmation shown when the chosen module + doc type already has a file —
-  // shape: { moduleId, kind, file, existingName, moduleName }
   const [confirmUpload, setConfirmUpload] = useState(null);
-
-  // Set whenever an upload request fails, so the panel can show *why*
-  // instead of silently doing nothing.
   const [uploadError, setUploadError] = useState(null);
 
-  // Clicking a "Recently uploaded" item scrolls to and flashes the matching
-  // doc slot in the module list below. Keyed by `${moduleId}-${kind}`.
   const [highlightKey, setHighlightKey] = useState(null);
   const docSlotRefs = useRef({});
   const highlightTimeoutRef = useRef(null);
-
   const fileInputRef = useRef(null);
 
   const authHeaders = (extra = {}) => {
@@ -107,7 +101,16 @@ export default function Reports() {
     return { Authorization: `Bearer ${token}`, ...extra };
   };
 
-  // --- Load modules (everyone signed in sees the same shared list) ---
+  // 🛑 Fetch logic synced with Active Project
+  useEffect(() => {
+    if (activeProject) {
+      fetchModules();
+    } else {
+      setModules([]);
+      setIsLoading(false);
+    }
+  }, [activeProject]);
+
   const fetchModules = async () => {
     setIsLoading(true);
     try {
@@ -115,7 +118,6 @@ export default function Reports() {
       if (res.ok) {
         const data = await res.json();
         setModules(data);
-        if (data.length > 0) setUploadModuleId(prev => prev ?? data[0]._id);
       }
     } catch (err) {
       console.error('Failed to fetch report modules:', err);
@@ -124,15 +126,27 @@ export default function Reports() {
     }
   };
 
-  useEffect(() => { fetchModules(); }, []);
+  // 🛑 SANDBOX FILTER: Only process reports that belong to the active workspace
+  const activeProjectReports = modules.filter(m => {
+    if (!activeProject) return false;
+    const projId = typeof m.project === 'string' ? m.project : m.project?._id;
+    return projId === activeProject._id;
+  });
 
-  // --- Derived stats ---
-  const totalModules = modules.length;
-  const proposalsUploaded = modules.filter(m => m.proposal).length;
-  const finalsUploaded = modules.filter(m => m.finalReport).length;
-  const dataReportsUploaded = modules.filter(m => m.dataReport).length;
+  // Auto-select the first module for the upload panel
+  useEffect(() => {
+    if (activeProjectReports.length > 0 && !uploadModuleId) {
+      setUploadModuleId(activeProjectReports[0]._id);
+    }
+  }, [activeProjectReports, uploadModuleId]);
 
-  const recentlyUploaded = modules
+  // Derived stats strictly for the sandboxed project
+  const totalModules = activeProjectReports.length;
+  const proposalsUploaded = activeProjectReports.filter(m => m.proposal).length;
+  const finalsUploaded = activeProjectReports.filter(m => m.finalReport).length;
+  const dataReportsUploaded = activeProjectReports.filter(m => m.dataReport).length;
+
+  const recentlyUploaded = activeProjectReports
     .flatMap(m => [
       m.proposal && { ...m.proposal, module: m.name, kind: 'proposal', moduleId: m._id },
       m.finalReport && { ...m.finalReport, module: m.name, kind: 'final', moduleId: m._id },
@@ -142,14 +156,15 @@ export default function Reports() {
     .sort((a, b) => new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0))
     .slice(0, 4);
 
-  // --- Module actions ---
+  // --- Module Actions ---
   const handleCreateModule = async () => {
-    if (!newModule.name.trim()) return;
+    if (!newModule.name.trim() || !activeProject) return;
     try {
       const res = await fetch(API_BASE, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
+          projectId: activeProject._id, // Explicitly link to current workspace
           name: newModule.name.trim(),
           description: newModule.description.trim(),
           color: newModule.color,
@@ -159,7 +174,7 @@ export default function Reports() {
       if (res.ok) {
         const created = await res.json();
         setModules(prev => [...prev, created]);
-        setUploadModuleId(prev => prev ?? created._id);
+        setUploadModuleId(created._id);
         setNewModule({ name: '', description: '', color: COLOR_OPTIONS[1], requireFinal: true });
         setShowAddModal(false);
       }
@@ -211,7 +226,7 @@ export default function Reports() {
     setRenameValue('');
   };
 
-  // --- Document actions ---
+  // --- Document Actions ---
   const handleDeleteDoc = async (moduleId, kind) => {
     try {
       const res = await fetch(`${API_BASE}/${moduleId}/${kind}`, { method: 'DELETE', headers: authHeaders() });
@@ -224,7 +239,6 @@ export default function Reports() {
     }
   };
 
-  // Runs whichever delete is currently staged in confirmDelete, then closes the modal
   const handleConfirmedDelete = () => {
     if (!confirmDelete) return;
     if (confirmDelete.type === 'module') {
@@ -267,13 +281,10 @@ export default function Reports() {
     setRenameValue('');
   };
 
-  // --- Upload flow: selecting a file only stages it; "Upload document" confirms ---
   const stageFile = (file) => {
     if (file) setPendingFile(file);
   };
 
-  // Shared upload call — the backend deletes whatever was in that slot and
-  // saves the new file, so this works whether or not one already exists.
   const uploadFile = async (moduleId, kind, file) => {
     if (!moduleId || !file) return false;
     try {
@@ -282,7 +293,7 @@ export default function Reports() {
       formData.append('docType', kind);
       const res = await fetch(`${API_BASE}/${moduleId}/upload`, {
         method: 'POST',
-        headers: authHeaders(), // do NOT set Content-Type — browser sets the multipart boundary
+        headers: authHeaders(),
         body: formData,
       });
       if (res.ok) {
@@ -293,19 +304,14 @@ export default function Reports() {
       }
       const errBody = await res.json().catch(() => ({}));
       const message = errBody.message || `Upload failed (HTTP ${res.status})`;
-      console.error('Upload failed:', message);
       setUploadError(message);
       return false;
     } catch (err) {
-      console.error('Failed to upload document:', err);
       setUploadError('Could not reach the server. Please try again.');
       return false;
     }
   };
 
-  // Clicking "Upload document" — if that module's slot is already occupied,
-  // stage a confirmation instead of uploading right away. Confirming replaces
-  // the file; canceling leaves the existing file untouched.
   const handleConfirmUpload = () => {
     if (!uploadModuleId || !pendingFile) return;
     setUploadError(null);
@@ -325,8 +331,6 @@ export default function Reports() {
     performUpload(uploadModuleId, docType, pendingFile);
   };
 
-  // Actually sends the file — used both for a fresh upload and after the
-  // replace confirmation is accepted.
   const performUpload = async (moduleId, kind, file) => {
     const ok = await uploadFile(moduleId, kind, file);
     if (ok) {
@@ -342,7 +346,6 @@ export default function Reports() {
   };
 
   const handleCancelReplace = () => {
-    // Leave the existing file exactly as it is — just drop the staged file.
     setConfirmUpload(null);
     setPendingFile(null);
     setUploadError(null);
@@ -359,8 +362,6 @@ export default function Reports() {
     stageFile(e.target.files?.[0]);
   };
 
-  // Shared download — takes a doc object directly (name + filePath) so it
-  // works both for a module's doc slot and for the Recently Uploaded feed.
   const downloadFile = async (doc) => {
     if (!doc) return;
     try {
@@ -385,8 +386,6 @@ export default function Reports() {
     await downloadFile(doc);
   };
 
-  // Clicking a "Recently uploaded" item — scroll to that file's card in the
-  // module list and flash-highlight it twice so it's easy to spot.
   const handleRecentClick = (f) => {
     const key = `${f.moduleId}-${f.kind}`;
     const el = docSlotRefs.current[key];
@@ -396,12 +395,37 @@ export default function Reports() {
     highlightTimeoutRef.current = window.setTimeout(() => setHighlightKey(null), 450);
   };
 
+  // --- RENDER 1: NO PROJECT SELECTED (SANDBOX WALL) ---
+  if (!activeProject && !isLoading) {
+    return (
+      <div className="flex-1 w-full flex items-center justify-center animate-fade-in p-8">
+        <div className="max-w-md w-full bg-theme-panel p-8 rounded-[2rem] border border-theme-border shadow-2xl text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-[#3B28CC] to-[#FF2D88] rounded-full mx-auto flex items-center justify-center mb-6 shadow-lg shadow-[#FF2D88]/20">
+            <Briefcase size={32} className="text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-theme-text mb-2">No Workspace Active</h2>
+          <p className="text-sm text-theme-muted mb-6">
+            Please select a project from the top menu or create a new workspace to view its reports.
+          </p>
+          <button 
+            onClick={() => navigate('/members')}
+            style={{ backgroundColor: 'var(--theme-accent)' }}
+            className="w-full hover:opacity-90 text-white py-3.5 rounded-xl text-sm font-bold transition-all shadow-[0_4px_14px_rgba(255,45,136,0.3)]"
+          >
+            Go to Workspaces
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --- RENDER 2: WORKSPACE REPORTS ---
   if (isLoading) {
     return (
       <div className="w-full h-full flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-4 border-white/10 border-t-[#FF2D88] rounded-full animate-spin" />
-          <p className="text-sm text-gray-400">Loading reports...</p>
+          <div className="w-8 h-8 border-4 border-theme-border border-t-theme-accent rounded-full animate-spin" />
+          <p className="text-sm text-theme-muted">Loading workspace reports...</p>
         </div>
       </div>
     );
@@ -409,79 +433,81 @@ export default function Reports() {
 
   return (
     <div
-      className="w-full max-w-7xl mx-auto h-full flex flex-col animate-fade-in text-white"
+      className="w-full max-w-7xl mx-auto animate-fade-in text-theme-text pb-10"
       onClick={() => setOpenMenu(null)}
     >
-
       {/* --- Header --- */}
-      <div className="flex items-start justify-between mb-6 flex-shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-8 gap-4">
         <div>
-          <h1 className="text-2xl font-bold mb-1">Reports</h1>
-          <p className="text-sm text-gray-400">
-            Upload and manage <span className="font-semibold text-gray-200">project proposals</span>,{' '}
-            <span className="font-semibold text-gray-200">final reports</span> and{' '}
-            <span className="font-semibold text-gray-200">data reports</span> for each report — visible and editable by everyone on the team
+          <h1 className="text-3xl font-bold mb-1">{activeProject?.name} Reports</h1>
+          <p className="text-sm text-theme-muted">
+            Workspace repository for <span className="font-semibold text-theme-text">project proposals</span>,{' '}
+            <span className="font-semibold text-theme-text">final reports</span> and{' '}
+            <span className="font-semibold text-theme-text">data reports</span>.
           </p>
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); setShowAddModal(true); }}
-          className="bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-[0_4px_14px_rgba(255,45,136,0.3)] transition-all hover:-translate-y-0.5 flex-shrink-0"
+          className="bg-theme-accent hover:opacity-90 text-white px-5 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-md transition-all hover:-translate-y-0.5 flex-shrink-0"
         >
           <Plus size={18} /> Add new reports
         </button>
       </div>
 
       {/* --- Stat Cards --- */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 flex-shrink-0">
-        <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-theme-panel border border-theme-border rounded-xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500"><FolderKanban size={20} /></div>
           <div>
-            <h3 className="text-xl font-bold">{totalModules}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Module Reports</p>
+            <h3 className="text-2xl font-bold">{totalModules}</h3>
+            <p className="text-xs text-theme-muted font-bold uppercase tracking-wider">Module Reports</p>
           </div>
         </div>
-        <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
+        <div className="bg-theme-panel border border-theme-border rounded-xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500"><UploadCloud size={20} /></div>
           <div>
-            <h3 className="text-xl font-bold">{proposalsUploaded}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Proposals uploaded</p>
+            <h3 className="text-2xl font-bold">{proposalsUploaded}</h3>
+            <p className="text-xs text-theme-muted font-bold uppercase tracking-wider">Proposals</p>
           </div>
         </div>
-        <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
+        <div className="bg-theme-panel border border-theme-border rounded-xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center text-green-500"><CheckCircle2 size={20} /></div>
           <div>
-            <h3 className="text-xl font-bold">{finalsUploaded}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Final reports uploaded</p>
+            <h3 className="text-2xl font-bold">{finalsUploaded}</h3>
+            <p className="text-xs text-theme-muted font-bold uppercase tracking-wider">Final reports</p>
           </div>
         </div>
-        <div className="bg-[#121629] border border-white/10 rounded-xl p-5 flex items-center gap-4 shadow-sm">
-          <div className="w-10 h-10 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500"><FileText size={20} /></div>
+        <div className="bg-theme-panel border border-theme-border rounded-xl p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-shadow">
+          <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center text-orange-500"><FileText size={20} /></div>
           <div>
-            <h3 className="text-xl font-bold">{dataReportsUploaded}</h3>
-            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Data reports uploaded</p>
+            <h3 className="text-2xl font-bold">{dataReportsUploaded}</h3>
+            <p className="text-xs text-theme-muted font-bold uppercase tracking-wider">Data reports</p>
           </div>
         </div>
       </div>
 
       {/* --- Main Grid: Modules (left) + Upload panel (right) --- */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
         {/* LEFT: Module list */}
-        <div className="lg:col-span-2 overflow-y-auto custom-scrollbar space-y-5 pb-4 pr-1">
-          {modules.length === 0 && (
-            <div className="border-2 border-dashed border-white/10 rounded-xl py-12 text-center text-gray-400">
-              <p className="text-sm">No modules yet. Add one to start tracking proposals and final reports.</p>
+        <div className="lg:col-span-2 space-y-5">
+          {activeProjectReports.length === 0 && (
+            <div className="border-2 border-dashed border-theme-border rounded-xl py-16 text-center text-theme-muted flex flex-col items-center justify-center">
+              <FolderKanban size={40} className="mb-3 opacity-20" />
+              <p className="text-sm font-medium text-theme-text">This workspace has no reports yet.</p>
+              <p className="text-xs mt-1">Click "Add new reports" to create a module and start tracking documents.</p>
             </div>
           )}
 
-          {modules.map((m) => {
+          {activeProjectReports.map((m) => {
             const total = 3;
             const done = (m.proposal ? 1 : 0) + (m.finalReport ? 1 : 0) + (m.dataReport ? 1 : 0);
+
             return (
-              <div key={m._id} className="bg-[#121629] border border-white/10 rounded-xl p-5 shadow-sm relative">
-                <div className="flex items-start justify-between mb-4">
+              <div key={m._id} className="bg-theme-panel border border-theme-border rounded-xl p-5 shadow-sm relative group transition-all hover:border-theme-accent/30">
+                <div className="flex items-start justify-between mb-5">
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: m.color }} />
+                    <div className="w-2.5 h-2.5 rounded-full mt-2 flex-shrink-0 shadow-sm" style={{ backgroundColor: m.color }} />
                     <div className="min-w-0">
                       {renamingModuleId === m._id ? (
                         <div className="flex items-center gap-1.5">
@@ -495,46 +521,51 @@ export default function Reports() {
                               if (e.key === 'Escape') cancelRenameModule();
                             }}
                             autoFocus
-                            className="bg-[#121629] border border-[#FF2D88]/50 rounded-lg px-2 py-1 text-sm font-bold focus:outline-none w-56"
+                            className="bg-theme-bg border border-theme-accent rounded-lg px-2 py-1 text-sm font-bold focus:outline-none w-56 text-theme-text"
                           />
-                          <button onClick={(e) => { e.stopPropagation(); commitRenameModule(m._id); }} className="text-green-500 hover:text-green-400 p-1"><Check size={15} /></button>
-                          <button onClick={(e) => { e.stopPropagation(); cancelRenameModule(); }} className="text-gray-400 hover:text-red-400 p-1"><X size={15} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); commitRenameModule(m._id); }} className="text-green-500 hover:text-green-600 p-1 bg-green-500/10 rounded-md"><Check size={15} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); cancelRenameModule(); }} className="text-theme-muted hover:text-red-500 p-1 bg-black/5 dark:bg-white/5 rounded-md"><X size={15} /></button>
                         </div>
                       ) : (
-                        <h4 className="font-bold text-sm">{m.name} Reports</h4>
+                        <h4 className="font-bold text-base text-theme-text">{m.name} Reports</h4>
                       )}
-                      <p className="text-xs text-gray-400 mt-0.5">{m.description}</p>
+                      
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-theme-muted">{m.description}</p>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <div className="hidden sm:flex items-center gap-2 w-24">
-                      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div className="flex items-center gap-4 flex-shrink-0">
+                    <div className="hidden sm:flex items-center gap-2 w-28">
+                      <div className="flex-1 h-2 rounded-full bg-black/5 dark:bg-white/5 overflow-hidden border border-theme-border">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-purple-500 to-[#FF2D88]"
-                          style={{ width: `${(done / total) * 100}%` }}
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${(done / total) * 100}%`, backgroundColor: m.color }}
                         />
                       </div>
-                      <span className="text-[11px] text-gray-400 font-medium">{done}/{total}</span>
+                      <span className="text-[11px] text-theme-muted font-bold">{done}/{total}</span>
                     </div>
+                    
+                    {/* Because of the sandbox, everyone viewing this CAN edit it */}
                     <div className="relative">
                       <button
                         onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `module-${m._id}` ? null : `module-${m._id}`); }}
-                        className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                        className="text-theme-muted hover:text-theme-text p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                       >
                         <MoreVertical size={16} />
                       </button>
                       {openMenu === `module-${m._id}` && (
-                        <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-44 bg-[#121629] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 text-sm">
+                        <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-44 bg-theme-panel border border-theme-border rounded-xl shadow-2xl overflow-hidden z-20 text-sm animate-in fade-in slide-in-from-top-2">
                           <button
                             onClick={() => handleRenameModule(m._id)}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-gray-200 hover:bg-white/5 transition-colors"
+                            className="w-full flex items-center gap-2 px-4 py-3 text-theme-text hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                           >
                             <Pencil size={14} /> Rename
                           </button>
                           <button
                             onClick={() => { setConfirmDelete({ type: 'module', id: m._id, name: m.name }); setOpenMenu(null); }}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-red-400 hover:bg-white/5 transition-colors"
+                            className="w-full flex items-center gap-2 px-4 py-3 text-red-500 hover:bg-red-500/10 transition-colors"
                           >
                             <Trash2 size={14} /> Delete module
                           </button>
@@ -545,21 +576,20 @@ export default function Reports() {
                 </div>
 
                 {(() => {
-                  // Renders one doc's card — only called for docs that actually exist.
                   const docSlot = (kind, label, doc) => (
                     <div
                       key={kind}
                       ref={(el) => { docSlotRefs.current[`${m._id}-${kind}`] = el; }}
-                      className={`flex-1 min-w-0 bg-[#121629] border border-white/5 rounded-lg p-3 flex items-center justify-between gap-2 ${
-                        highlightKey === `${m._id}-${kind}` ? 'reports-highlight-flash' : ''
+                      className={`flex-1 min-w-0 bg-theme-bg border border-theme-border rounded-lg p-3 flex items-center justify-between gap-2 transition-all hover:border-theme-muted/50 ${
+                        highlightKey === `${m._id}-${kind}` ? 'ring-2 ring-theme-accent bg-theme-accent/10 shadow-lg' : ''
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <FileBadge doc={doc} />
                         <div className="min-w-0 flex-1">
-                          <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">{label}</p>
+                          <p className="text-[10px] text-theme-muted font-bold uppercase tracking-wider mb-0.5">{label}</p>
                           {renamingDocKey === `${m._id}-${kind}` ? (
-                            <div className="flex items-center gap-1 mt-0.5">
+                            <div className="flex items-center gap-1">
                               <input
                                 type="text"
                                 value={renameValue}
@@ -570,33 +600,34 @@ export default function Reports() {
                                   if (e.key === 'Escape') cancelRenameDoc();
                                 }}
                                 autoFocus
-                                className="bg-[#121629] border border-[#FF2D88]/50 rounded-md px-2 py-0.5 text-sm font-medium focus:outline-none w-full min-w-0"
+                                className="bg-theme-panel border border-theme-accent rounded-md px-2 py-0.5 text-sm font-medium focus:outline-none w-full min-w-0 text-theme-text"
                               />
-                              <button onClick={(e) => { e.stopPropagation(); commitRenameDoc(m._id, kind); }} className="text-green-500 hover:text-green-400 p-1 flex-shrink-0"><Check size={14} /></button>
-                              <button onClick={(e) => { e.stopPropagation(); cancelRenameDoc(); }} className="text-gray-400 hover:text-red-400 p-1 flex-shrink-0"><X size={14} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); commitRenameDoc(m._id, kind); }} className="text-green-500 hover:text-green-600 p-1 flex-shrink-0 bg-green-500/10 rounded"><Check size={14} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); cancelRenameDoc(); }} className="text-theme-muted hover:text-red-500 p-1 flex-shrink-0 bg-black/5 dark:bg-white/5 rounded"><X size={14} /></button>
                             </div>
                           ) : (
-                            <p className="text-sm font-medium truncate">{doc.name}</p>
+                            <p className="text-sm font-bold truncate text-theme-text">{doc.name}</p>
                           )}
-                          <p className="text-[11px] text-gray-500">{formatFileSize(doc.size)} · Uploaded {timeAgo(doc.uploadedAt)}</p>
+                          <p className="text-[11px] text-theme-muted mt-0.5">{formatFileSize(doc.size)} · {timeAgo(doc.uploadedAt)}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleDownloadDoc(m._id, kind); }}
                           title="Download"
-                          className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                          className="text-theme-muted hover:text-theme-text p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                         >
                           <Download size={15} />
                         </button>
+                        
                         <div className="relative">
-                          <button onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `${m._id}-${kind}` ? null : `${m._id}-${kind}`); }} className="text-gray-400 hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors">
+                          <button onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `${m._id}-${kind}` ? null : `${m._id}-${kind}`); }} className="text-theme-muted hover:text-theme-text p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <MoreVertical size={15} />
                           </button>
                           {openMenu === `${m._id}-${kind}` && (
-                            <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-36 bg-[#121629] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 text-sm">
-                              <button onClick={() => handleRenameDoc(m._id, kind)} className="w-full flex items-center gap-2 px-3 py-2.5 text-gray-200 hover:bg-white/5"><Pencil size={13} /> Rename</button>
-                              <button onClick={() => { setConfirmDelete({ type: 'doc', moduleId: m._id, kind, name: doc.name }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-white/5"><Trash2 size={13} /> Delete</button>
+                            <div onClick={(e) => e.stopPropagation()} className="absolute right-0 top-9 w-36 bg-theme-panel border border-theme-border rounded-xl shadow-2xl overflow-hidden z-20 text-sm animate-in fade-in slide-in-from-top-2">
+                              <button onClick={() => handleRenameDoc(m._id, kind)} className="w-full flex items-center gap-2 px-3 py-2.5 text-theme-text hover:bg-black/5 dark:hover:bg-white/5"><Pencil size={13} /> Rename</button>
+                              <button onClick={() => { setConfirmDelete({ type: 'doc', moduleId: m._id, kind, name: doc.name }); setOpenMenu(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 text-red-500 hover:bg-red-500/10"><Trash2 size={13} /> Delete</button>
                             </div>
                           )}
                         </div>
@@ -604,8 +635,6 @@ export default function Reports() {
                     </div>
                   );
 
-                  // Only include slots that actually have a file — the bar
-                  // evenly divides among however many are present (1, 2, or 3).
                   const slots = [
                     m.proposal && docSlot('proposal', 'Project Proposal', m.proposal),
                     m.finalReport && docSlot('final', 'Final Report', m.finalReport),
@@ -614,72 +643,64 @@ export default function Reports() {
 
                   if (slots.length === 0) {
                     return (
-                      <div className="bg-[#121629] border border-white/5 rounded-lg p-4 flex items-center gap-3 text-gray-500">
-                        <div className="w-9 h-9 rounded-lg border-2 border-dashed border-white/10 flex items-center justify-center flex-shrink-0"><Plus size={16} /></div>
-                        <p className="text-sm">No reports uploaded yet — use the panel to add a Project Proposal, Final Report, or Data Report.</p>
+                      <div className="bg-theme-bg border border-theme-border rounded-lg p-4 flex items-center gap-3 text-theme-muted">
+                        <div className="w-9 h-9 rounded-lg border-2 border-dashed border-theme-border flex items-center justify-center flex-shrink-0"><Plus size={16} /></div>
+                        <p className="text-sm">No reports uploaded yet. Team members can use the panel to add documents.</p>
                       </div>
                     );
                   }
 
-                  return <div className="flex flex-col sm:flex-row gap-3">{slots}</div>;
+                  return <div className="flex flex-col sm:flex-row gap-3 mt-4">{slots}</div>;
                 })()}
               </div>
             );
           })}
-
-          {/* Add module footer card */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setShowAddModal(true); }}
-            className="w-full border-2 border-dashed border-white/10 rounded-xl py-6 flex flex-col items-center justify-center gap-1 text-gray-400 hover:text-[#FF2D88] hover:border-[#FF2D88]/40 transition-colors"
-          >
-            <span className="flex items-center gap-2 font-bold text-sm"><Plus size={16} /> Add new reports</span>
-            <span className="text-xs">Track proposals, final reports and data reports for another report</span>
-          </button>
         </div>
 
         {/* RIGHT: Upload panel + recently uploaded */}
-        <div className="space-y-8 overflow-y-auto custom-scrollbar pb-4 pr-1" onClick={(e) => e.stopPropagation()}>
-          <div className="bg-[#121629] border border-white/10 rounded-2xl p-6 shadow-sm">
-            <h2 className="text-lg font-bold mb-1">Upload a document</h2>
-            <p className="text-xs text-gray-400 mb-5">Attach a proposal, final report, or data report to a report</p>
+        <div className="space-y-8" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-theme-panel border border-theme-border rounded-2xl p-6 shadow-sm relative overflow-hidden">
+
+            <h2 className="text-lg font-bold mb-1 text-theme-text">Upload a document</h2>
+            <p className="text-xs text-theme-muted mb-5">Attach documents securely to your workspace reports.</p>
 
             <div className="space-y-4">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Report</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-theme-muted mb-1.5 block">Authorized Reports</label>
                 <select
                   value={uploadModuleId ?? ''}
                   onChange={(e) => setUploadModuleId(e.target.value)}
-                  disabled={modules.length === 0}
-                  className="w-full bg-[#121629] border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#FF2D88] appearance-none cursor-pointer disabled:opacity-50"
+                  disabled={activeProjectReports.length === 0}
+                  className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-theme-accent appearance-none cursor-pointer disabled:opacity-50 text-theme-text shadow-inner"
                 >
-                  {modules.length === 0 && <option value="">No modules yet</option>}
-                  {modules.map(m => <option key={m._id} value={m._id}>{m.name} Report</option>)}
+                  {activeProjectReports.length === 0 && <option value="">No modules yet</option>}
+                  {activeProjectReports.map(m => <option key={m._id} value={m._id}>{m.name} Report</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Document type</label>
-                <div className="grid grid-cols-3 gap-2 bg-[#121629] p-1 rounded-xl border border-white/10">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-theme-muted mb-1.5 block">Document type</label>
+                <div className="grid grid-cols-3 gap-2 bg-theme-bg p-1 rounded-xl border border-theme-border">
                   <button
                     onClick={() => setDocType('proposal')}
-                    className={`py-2.5 rounded-lg text-xs font-bold transition-colors ${
-                      docType === 'proposal' ? 'bg-gradient-to-r from-purple-600 to-[#FF2D88] text-white shadow' : 'text-gray-400 hover:text-white'
+                    className={`py-2.5 rounded-lg text-xs font-bold transition-all ${
+                      docType === 'proposal' ? 'bg-theme-panel text-theme-accent shadow border border-theme-border' : 'text-theme-muted hover:text-theme-text'
                     }`}
                   >
-                    Project Proposal
+                    Proposal
                   </button>
                   <button
                     onClick={() => setDocType('final')}
-                    className={`py-2.5 rounded-lg text-xs font-bold transition-colors ${
-                      docType === 'final' ? 'bg-gradient-to-r from-purple-600 to-[#FF2D88] text-white shadow' : 'text-gray-400 hover:text-white'
+                    className={`py-2.5 rounded-lg text-xs font-bold transition-all ${
+                      docType === 'final' ? 'bg-theme-panel text-theme-accent shadow border border-theme-border' : 'text-theme-muted hover:text-theme-text'
                     }`}
                   >
                     Final Report
                   </button>
                   <button
                     onClick={() => setDocType('data')}
-                    className={`py-2.5 rounded-lg text-xs font-bold transition-colors ${
-                      docType === 'data' ? 'bg-gradient-to-r from-purple-600 to-[#FF2D88] text-white shadow' : 'text-gray-400 hover:text-white'
+                    className={`py-2.5 rounded-lg text-xs font-bold transition-all ${
+                      docType === 'data' ? 'bg-theme-panel text-theme-accent shadow border border-theme-border' : 'text-theme-muted hover:text-theme-text'
                     }`}
                   >
                     Data Report
@@ -693,17 +714,17 @@ export default function Reports() {
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
                 className={`rounded-xl border-2 border-dashed p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
-                  isDragging ? 'border-[#FF2D88] bg-[#FF2D88]/5' : 'border-white/10 hover:border-[#FF2D88]/40'
+                  isDragging ? 'border-theme-accent bg-theme-accent/5' : 'border-theme-border hover:border-theme-accent/50 bg-theme-bg'
                 }`}
               >
-                <div className="w-12 h-12 rounded-full bg-gradient-to-r from-purple-600 to-[#FF2D88] flex items-center justify-center text-white mb-3">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center text-white mb-3 shadow-md" style={{ backgroundColor: 'var(--theme-accent)' }}>
                   <CloudIcon size={22} />
                 </div>
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-theme-text">
                   {pendingFile ? pendingFile.name : 'Drag & drop file here'}
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {pendingFile ? 'Selected · click "Upload document" to confirm' : 'or click to browse · PDF, DOC, DOCX up to 25MB'}
+                <p className="text-xs text-theme-muted mt-1">
+                  {pendingFile ? 'Selected · click "Upload document" to confirm' : 'or click to browse · PDF, DOC, DOCX'}
                 </p>
                 <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx" onChange={handleBrowse} className="hidden" />
               </div>
@@ -711,37 +732,42 @@ export default function Reports() {
               <button
                 onClick={handleConfirmUpload}
                 disabled={!pendingFile || !uploadModuleId}
-                className="w-full bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 disabled:opacity-50 text-white py-3.5 rounded-xl text-sm font-bold transition-all shadow-[0_4px_14px_rgba(255,45,136,0.3)] flex items-center justify-center gap-2"
+                style={{ backgroundColor: 'var(--theme-accent)' }}
+                className="w-full hover:opacity-90 disabled:opacity-50 text-white py-3.5 rounded-xl text-sm font-bold transition-all shadow-md flex items-center justify-center gap-2 active:scale-95"
               >
                 <UploadCloud size={18} /> Upload document
               </button>
               {uploadError && (
-                <p className="text-xs text-red-400 text-center -mt-2">{uploadError}</p>
+                <div className="flex items-center justify-center gap-1 text-xs text-red-500 mt-2 bg-red-500/10 p-2 rounded-lg border border-red-500/20">
+                  <AlertCircle size={14} /> {uploadError}
+                </div>
               )}
             </div>
           </div>
 
           <div>
-            <h2 className="text-lg font-bold mb-4">Recently uploaded</h2>
+            <h2 className="text-lg font-bold mb-4 text-theme-text">Workspace Activity</h2>
             <div className="space-y-2">
               {recentlyUploaded.map((f, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => handleRecentClick(f)}
-                  className="w-full flex items-center gap-3 bg-[#121629] border border-white/5 rounded-xl p-3 text-left hover:border-white/20 hover:bg-white/5 transition-colors"
+                  className="w-full flex items-center gap-3 bg-theme-panel border border-theme-border rounded-xl p-3 text-left hover:border-theme-accent/50 transition-all hover:shadow-sm"
                 >
                   <FileBadge doc={f} />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{f.name}</p>
-                    <p className="text-[11px] text-gray-400 flex items-center gap-1">
+                    <p className="text-sm font-bold truncate text-theme-text">{f.name}</p>
+                    <p className="text-[11px] text-theme-muted flex items-center gap-1 mt-0.5">
                       {f.module} <span className="mx-0.5">·</span> <Clock size={10} /> {timeAgo(f.uploadedAt)}
                     </p>
                   </div>
                 </button>
               ))}
               {recentlyUploaded.length === 0 && (
-                <p className="text-sm text-gray-500 text-center py-6">Nothing uploaded yet.</p>
+                <div className="border border-theme-border bg-theme-bg rounded-xl py-8 text-center text-theme-muted">
+                  <p className="text-sm">No recent activity.</p>
+                </div>
               )}
             </div>
           </div>
@@ -752,77 +778,79 @@ export default function Reports() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowAddModal(false)}>
           <div
-            className="bg-[#121629] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl"
+            className="bg-theme-panel border border-theme-border rounded-2xl w-full max-w-md p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between mb-1">
-              <h2 className="text-lg font-bold text-white">Add a new report</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-white p-1">
+              <h2 className="text-lg font-bold text-theme-text">Track a new report</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-theme-muted hover:text-red-500 p-1 bg-black/5 dark:bg-white/5 rounded-lg transition-colors">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-xs text-gray-400 mb-6">Track proposals, final reports, and data reports for a new part of your project</p>
+            <p className="text-xs text-theme-muted mb-6">Create a slot for <strong className="text-theme-text">{activeProject?.name}</strong> proposals and final reports.</p>
 
             <div className="space-y-5">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">MODULE REPORT</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-theme-muted mb-1.5 block">REPORT TITLE</label>
                 <input
                   type="text"
                   value={newModule.name}
                   onChange={(e) => setNewModule(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. Mobile App Development"
-                  className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF2D88]"
+                  placeholder="e.g. Mobile App Deployment"
+                  className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-3 text-sm text-theme-text placeholder-theme-muted focus:outline-none focus:border-theme-accent shadow-inner transition-colors"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5 block">Description</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-theme-muted mb-1.5 block">Description</label>
                 <textarea
                   value={newModule.description}
                   onChange={(e) => setNewModule(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Briefly describe the scope of this report..."
                   rows={2}
-                  className="w-full bg-[#0A0D14] border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FF2D88] resize-none"
+                  className="w-full bg-theme-bg border border-theme-border rounded-xl px-4 py-3 text-sm text-theme-text placeholder-theme-muted focus:outline-none focus:border-theme-accent resize-none shadow-inner transition-colors"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-2 block">Icon & color</label>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-theme-muted mb-2 block">Icon color</label>
                 <div className="flex items-center gap-3">
                   {COLOR_OPTIONS.map(c => (
                     <button
                       key={c}
                       onClick={() => setNewModule(prev => ({ ...prev, color: c }))}
-                      className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110"
-                      style={{ backgroundColor: c, boxShadow: newModule.color === c ? `0 0 0 2px #121629, 0 0 0 4px ${c}` : 'none' }}
+                      className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 shadow-sm"
+                      style={{ backgroundColor: c, boxShadow: newModule.color === c ? `0 0 0 2px var(--theme-panel), 0 0 0 4px ${c}` : 'none' }}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-200">Require a final report</span>
+              <div className="flex items-center justify-between p-3 bg-theme-bg border border-theme-border rounded-xl">
+                <span className="text-sm text-theme-text font-bold">Require a final report</span>
                 <button
                   onClick={() => setNewModule(prev => ({ ...prev, requireFinal: !prev.requireFinal }))}
-                  className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors ${newModule.requireFinal ? 'bg-[#FF2D88] justify-end' : 'bg-white/10 justify-start'}`}
+                  className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors shadow-inner ${newModule.requireFinal ? 'justify-end' : 'bg-black/10 dark:bg-white/10 justify-start'}`}
+                  style={newModule.requireFinal ? { backgroundColor: 'var(--theme-accent)' } : {}}
                 >
-                  <span className="w-5 h-5 rounded-full bg-white block" />
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm block" />
                 </button>
               </div>
 
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-300 border border-white/10 hover:bg-white/5 transition-colors"
+                  className="flex-1 py-3 rounded-xl text-sm font-bold text-theme-muted border border-theme-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleCreateModule}
                   disabled={!newModule.name.trim()}
-                  className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  style={{ backgroundColor: 'var(--theme-accent)' }}
+                  className="flex-1 py-3 rounded-xl text-sm font-bold text-white hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-md"
                 >
-                  <Plus size={16} /> Create report
+                  <Plus size={16} /> Create
                 </button>
               </div>
             </div>
@@ -834,28 +862,28 @@ export default function Reports() {
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setConfirmDelete(null)}>
           <div
-            className="bg-[#121629] border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            className="bg-theme-panel border border-theme-border rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-white mb-2">
-              Delete {confirmDelete.type === 'module' ? 'module' : 'file'}?
+            <h2 className="text-lg font-bold text-theme-text mb-2">
+              Delete {confirmDelete.type === 'module' ? 'report module' : 'document'}?
             </h2>
-            <p className="text-sm text-gray-400 mb-6">
-              <span className="text-gray-200 font-medium">{confirmDelete.name}</span>
+            <p className="text-sm text-theme-muted mb-6">
+              <span className="text-theme-text font-bold block mb-1">{confirmDelete.name}</span>
               {confirmDelete.type === 'module'
-                ? ' and its uploaded files will be permanently deleted. This can\'t be undone.'
-                : ' will be permanently deleted. This can\'t be undone.'}
+                ? 'All uploaded files linked to this module will be permanently deleted.'
+                : 'This document will be permanently deleted.'} This cannot be undone.
             </p>
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-300 border border-white/10 hover:bg-white/5 transition-colors"
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-theme-muted border border-theme-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmedDelete}
-                className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-500 transition-colors flex items-center justify-center gap-2"
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600 transition-colors flex items-center justify-center gap-2 shadow-md"
               >
                 <Trash2 size={16} /> Delete
               </button>
@@ -864,31 +892,32 @@ export default function Reports() {
         </div>
       )}
 
-      {/* --- Confirm Replace Modal (shown when the chosen slot already has a file) --- */}
+      {/* --- Confirm Replace Modal --- */}
       {confirmUpload && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleCancelReplace}>
           <div
-            className="bg-[#121629] border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl"
+            className="bg-theme-panel border border-theme-border rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in fade-in zoom-in duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-lg font-bold text-white mb-2">Replace existing file?</h2>
-            <p className="text-sm text-gray-400 mb-6">
-              <span className="text-gray-200 font-medium">{confirmUpload.moduleName} Report</span> already has a{' '}
-              {kindLabel(confirmUpload.kind)} —{' '}
-              <span className="text-gray-200 font-medium">{confirmUpload.existingName}</span>. Uploading{' '}
-              <span className="text-gray-200 font-medium">{confirmUpload.file?.name}</span> will replace it.
-              This can&apos;t be undone.
+            <h2 className="text-lg font-bold text-theme-text mb-2">Replace existing file?</h2>
+            <p className="text-sm text-theme-muted mb-6">
+              <span className="text-theme-text font-bold block mb-1">{confirmUpload.moduleName}</span>
+              This already has a {kindLabel(confirmUpload.kind)} attached:<br/>
+              <span className="text-theme-text font-medium">{confirmUpload.existingName}</span>. 
+              <br/><br/>
+              Uploading <span className="text-theme-text font-medium">{confirmUpload.file?.name}</span> will overwrite the old file permanently.
             </p>
             <div className="flex items-center gap-3">
               <button
                 onClick={handleCancelReplace}
-                className="flex-1 py-3 rounded-xl text-sm font-bold text-gray-300 border border-white/10 hover:bg-white/5 transition-colors"
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-theme-muted border border-theme-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleConfirmedReplace}
-                className="flex-1 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-purple-600 to-[#FF2D88] hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                style={{ backgroundColor: 'var(--theme-accent)' }}
+                className="flex-1 py-3 rounded-xl text-sm font-bold text-white hover:opacity-90 transition-all flex items-center justify-center gap-2 shadow-md"
               >
                 <UploadCloud size={16} /> Replace
               </button>
@@ -896,18 +925,6 @@ export default function Reports() {
           </div>
         </div>
       )}
-
-      {/* Fast multi-flash highlight animation used to draw attention to a doc
-          slot when jumping to it from "Recently uploaded" */}
-      <style>{`
-        @keyframes reportsHighlightFlash {
-          0%, 100% { background-color: transparent; box-shadow: none; }
-          50% { background-color: rgba(255, 45, 136, 0.22); box-shadow: 0 0 0 2px rgba(255, 45, 136, 0.65); }
-        }
-        .reports-highlight-flash {
-          animation: reportsHighlightFlash 0.18s ease-in-out 2;
-        }
-      `}</style>
     </div>
   );
 }
