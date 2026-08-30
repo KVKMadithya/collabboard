@@ -3,28 +3,24 @@ import {
   Send, Bot, User, Loader2, Mic, MicOff, 
   Paperclip, X, Briefcase, Globe, FileText 
 } from 'lucide-react';
-import { useProject } from '../context/ProjectContext'; // 👈 Needed for Workspace Context
+import { useProject } from '../context/ProjectContext';
 
 export default function AiAssistant() {
   const { activeProject } = useProject();
   
-  // --- STATE ---
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [chatMode, setChatMode] = useState('general'); // 'general' | 'workspace'
+  const [chatMode, setChatMode] = useState('general');
   
-  // File Attachment State
   const [attachedFile, setAttachedFile] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Voice Recognition State
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef(null);
+  const baseInputRef = useRef(''); // 🛑 THE FIX: Stores text typed before the mic was pressed
 
-  // Auto-scroll ref
   const messagesEndRef = useRef(null);
 
-  // Load Preferences & Greeting
   const savedPrefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
   const greetingLine = savedPrefs.customGreeting || 'Hello! How can I help with your board today?';
   
@@ -41,11 +37,13 @@ export default function AiAssistant() {
       recognition.interimResults = true;
 
       recognition.onresult = (event) => {
-        let currentTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          currentTranscript += event.results[i][0].transcript;
+        let sessionTranscript = '';
+        // 🛑 THE FIX: Loop through the current session and build a single string
+        for (let i = 0; i < event.results.length; i++) {
+          sessionTranscript += event.results[i][0].transcript;
         }
-        setInput(prev => prev + currentTranscript);
+        // Safely combine pre-existing text with the live voice transcription
+        setInput((baseInputRef.current ? baseInputRef.current + ' ' : '') + sessionTranscript);
       };
 
       recognition.onerror = (event) => {
@@ -61,7 +59,6 @@ export default function AiAssistant() {
     }
   }, []);
 
-  // --- SCROLL TO BOTTOM ---
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
@@ -73,7 +70,7 @@ export default function AiAssistant() {
       setIsRecording(false);
     } else {
       if (recognitionRef.current) {
-        setInput(''); // Clear input for fresh dictation
+        baseInputRef.current = input; // 🛑 Capture existing text before starting
         recognitionRef.current.start();
         setIsRecording(true);
       } else {
@@ -85,7 +82,6 @@ export default function AiAssistant() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate file type (PDF, DOCX, TXT)
       const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
       if (!validTypes.includes(file.type)) {
         alert("Please upload a PDF, DOCX, or TXT file.");
@@ -102,12 +98,16 @@ export default function AiAssistant() {
 
   const handleSend = async (e) => {
     e?.preventDefault();
-    const messageText = input.trim();
     
-    // Prevent sending empty messages unless there's a file attached
+    // Stop recording automatically if user hits send while speaking
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    }
+
+    const messageText = input.trim();
     if ((!messageText && !attachedFile) || isGenerating) return;
 
-    // Create visually appealing UI message
     const userMsg = { 
       id: Date.now(), 
       sender: 'user', 
@@ -117,12 +117,13 @@ export default function AiAssistant() {
     
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
-    const fileToSend = attachedFile; // Save reference before clearing UI
+    baseInputRef.current = ''; // Reset base input
+    
+    const fileToSend = attachedFile;
     removeFile();
     setIsGenerating(true);
 
     try {
-      // 🛑 Construct FormData to handle Text + File + Context Data
       const formData = new FormData();
       formData.append('message', messageText);
       formData.append('mode', chatMode);
@@ -138,26 +139,19 @@ export default function AiAssistant() {
       
       const response = await fetch('http://localhost:5000/api/ai/chat', {
         method: 'POST',
-        headers: { 
-          Authorization: `Bearer ${token}` 
-          // Do NOT set Content-Type here; browser sets it automatically for FormData
-        },
+        headers: { Authorization: `Bearer ${token}` },
         body: formData
       });
 
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(data.message || `Server Error (${response.status})`);
+        throw new Error(data.message || data.error || `Server Error (${response.status})`);
       }
 
       setMessages((prev) => [
         ...prev, 
-        { 
-          id: Date.now() + 1, 
-          sender: 'ai', 
-          text: data.reply || "No reply received from AI." 
-        }
+        { id: Date.now() + 1, sender: 'ai', text: data.reply || "No reply received from AI." }
       ]);
 
     } catch (error) {
@@ -186,7 +180,6 @@ export default function AiAssistant() {
           </div>
         </div>
 
-        {/* Workspace vs General Mode Switch */}
         <div className="flex items-center bg-theme-panel border border-theme-border rounded-xl p-1 shadow-sm">
           <button
             onClick={() => setChatMode('general')}
@@ -222,15 +215,12 @@ export default function AiAssistant() {
 
         {messages.map((msg) => (
           <div key={msg.id} className={`flex gap-3 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            
-            {/* AI Avatar */}
             {msg.sender === 'ai' && (
               <div className="w-8 h-8 rounded-full bg-theme-panel border border-theme-border flex items-center justify-center text-theme-accent flex-shrink-0 mt-1 shadow-sm">
                 <Bot size={16} />
               </div>
             )}
             
-            {/* Message Bubble */}
             <div className={`flex flex-col max-w-[80%] ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
               <div
                 className={`rounded-2xl px-5 py-3.5 text-sm shadow-sm leading-relaxed whitespace-pre-wrap ${
@@ -239,7 +229,6 @@ export default function AiAssistant() {
                     : 'bg-theme-panel border border-theme-border text-theme-text rounded-tl-sm'
                 }`}
               >
-                {/* Display File Attachment in History */}
                 {msg.fileName && (
                   <div className="flex items-center gap-2 bg-black/20 px-3 py-2 rounded-lg mb-2 text-xs font-medium border border-white/10">
                     <FileText size={14} /> {msg.fileName}
@@ -249,7 +238,6 @@ export default function AiAssistant() {
               </div>
             </div>
 
-            {/* User Avatar */}
             {msg.sender === 'user' && (
               <div className="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 flex-shrink-0 mt-1 border border-indigo-500/30 shadow-sm">
                 <User size={16} />
@@ -258,7 +246,6 @@ export default function AiAssistant() {
           </div>
         ))}
         
-        {/* Loading Indicator */}
         {isGenerating && (
           <div className="flex gap-3 justify-start animate-in fade-in">
              <div className="w-8 h-8 rounded-full bg-theme-panel border border-theme-border flex items-center justify-center text-theme-accent flex-shrink-0 mt-1 shadow-sm">
@@ -276,7 +263,6 @@ export default function AiAssistant() {
       {/* --- INPUT AREA --- */}
       <div className="relative flex-shrink-0">
         
-        {/* Staged File Indicator */}
         {attachedFile && (
           <div className="absolute -top-12 left-0 flex items-center gap-2 bg-theme-panel border border-theme-accent text-theme-text px-3 py-1.5 rounded-lg text-xs shadow-lg animate-in slide-in-from-bottom-2">
             <FileText size={14} className="text-theme-accent" />
@@ -289,7 +275,6 @@ export default function AiAssistant() {
 
         <form onSubmit={handleSend} className="flex gap-2 bg-theme-panel p-2.5 rounded-2xl border border-theme-border shadow-md relative focus-within:border-theme-accent transition-colors">
           
-          {/* File Upload Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -306,7 +291,6 @@ export default function AiAssistant() {
             className="hidden" 
           />
 
-          {/* Text Input */}
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -323,7 +307,6 @@ export default function AiAssistant() {
             rows="1"
           />
 
-          {/* Voice Dictation Button */}
           <button
             type="button"
             onClick={toggleRecording}
@@ -337,7 +320,6 @@ export default function AiAssistant() {
             {isRecording ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
 
-          {/* Send Button */}
           <button
             type="submit"
             disabled={isGenerating || (!input.trim() && !attachedFile)}
