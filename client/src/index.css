@@ -73,3 +73,36 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* 🛑 BRUTAL OVERRIDES TO HIDE GOOGLE TRANSLATE ARTIFACTS GLOBALLY */
+
+/* Prevent Google from pushing the entire webpage down */
+html { 
+  top: 0px !important; 
+  margin-top: 0px !important; 
+}
+body { 
+  top: 0px !important; 
+  margin-top: 0px !important; 
+  position: static !important; 
+}
+
+/* Annihilate the specific Google Banner frames and obfuscated div containers */
+.goog-te-banner-frame.skiptranslate, 
+.goog-te-gadget-icon,
+.VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
+.VIpgJd-ZVi9od-aZ2wEe-OiiCO,
+#goog-gt-tt,
+.goog-te-balloon-frame { 
+  display: none !important; 
+  visibility: hidden !important;
+}
+
+/* Remove hover tooltips and weird text highlighting */
+.goog-tooltip { display: none !important; }
+.goog-tooltip:hover { display: none !important; }
+.goog-text-highlight { 
+  background-color: transparent !important; 
+  border: none !important; 
+  box-shadow: none !important; 
+}

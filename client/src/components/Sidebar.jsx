@@ -84,7 +84,13 @@ export default function Sidebar() {
           
           <div className="flex items-center justify-between text-2xl font-bold text-theme-text whitespace-nowrap">
             <div className="flex items-center gap-3">
-              <span className="text-[#FF2D88] drop-shadow-[0_0_8px_rgba(255,45,136,0.5)]">📌</span> 
+              {/* 🛑 THE FIX: Swapped hardcoded pink for dynamic theme-accent and inline filter for the exact glow effect */}
+              <span 
+                className="text-theme-accent" 
+                style={{ filter: 'drop-shadow(0 0 8px var(--theme-accent))' }}
+              >
+                📌
+              </span> 
               <span className={`transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
                 CollabBoard
               </span>
@@ -99,12 +105,12 @@ export default function Sidebar() {
             >
               <Pin 
                 size={18} 
-                className={`transition-colors duration-300 ${isPinned ? 'text-[#FF2D88] fill-[#FF2D88]/20' : 'text-theme-muted hover:text-theme-text'}`} 
+                className={`transition-colors duration-300 ${isPinned ? 'text-theme-accent fill-current' : 'text-theme-muted hover:text-theme-text'}`} 
               />
             </button>
           </div>
           
-          {/* 🛑 UPDATED: Search Bar completely overhauled for Live Search */}
+          {/* Search Bar */}
           <div 
             onClick={handleSearchIconClick}
             className={`bg-theme-bg rounded-xl flex items-center border border-theme-border transition-all duration-300 ${
@@ -114,8 +120,8 @@ export default function Sidebar() {
             <Search size={18} className="text-theme-muted flex-shrink-0" />
             <input 
               ref={searchInputRef}
-              type="search"          /* Gives a nice 'x' to clear the input on most browsers */
-              autoComplete="off"     /* Completely disables the annoying browser dropdown */
+              type="search"          
+              autoComplete="off"     
               spellCheck="false"
               value={searchQuery}
               onChange={handleSearchChange} 
@@ -145,7 +151,7 @@ export default function Sidebar() {
                   className={({ isActive }) => 
                     `flex items-center px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                       isActive 
-                        ? 'text-[#FF2D88] bg-black/5 dark:bg-white/5 shadow-[inset_3px_0_0_0_#FF2D88]' 
+                        ? 'text-theme-accent bg-black/5 dark:bg-white/5 shadow-[inset_3px_0_0_0_var(--theme-accent)]' 
                         : 'text-theme-muted hover:text-theme-text hover:bg-black/5 dark:hover:bg-white/5 hover:scale-[1.02]'
                     }`
                   }
@@ -180,7 +186,7 @@ export default function Sidebar() {
                   className={({ isActive }) => 
                     `flex items-center px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
                       isActive && !item.isAction
-                        ? 'text-[#FF2D88] bg-black/5 dark:bg-white/5 shadow-[inset_3px_0_0_0_#FF2D88]' 
+                        ? 'text-theme-accent bg-black/5 dark:bg-white/5 shadow-[inset_3px_0_0_0_var(--theme-accent)]' 
                         : 'text-theme-muted hover:text-theme-text hover:bg-black/5 dark:hover:bg-white/5 hover:scale-[1.02]'
                     }`
                   }

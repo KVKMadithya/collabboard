@@ -24,6 +24,51 @@ export default function TopBar({ user, onSignOut }) {
   const notifRef = useRef(null);
   const projectRef = useRef(null);
 
+  // 🛑 THE BULLETPROOF GOOGLE TRANSLATE WATCHDOG
+  useEffect(() => {
+    const obliterateGoogleBar = () => {
+      // 1. Force the body and HTML tags to ignore Google's top margin injections
+      document.body.style.setProperty('top', '0px', 'important');
+      document.body.style.setProperty('margin-top', '0px', 'important');
+      document.body.style.setProperty('position', 'static', 'important');
+      document.documentElement.style.setProperty('top', '0px', 'important');
+      document.documentElement.style.setProperty('margin-top', '0px', 'important');
+
+      // 2. Hunt down Google's specific iframes, divs, and tooltips and hide them
+      const googleElements = document.querySelectorAll(
+        '.goog-te-banner-frame, .skiptranslate, #goog-gt-tt, .goog-te-balloon-frame, .VIpgJd-ZVi9od-aZ2wEe-wOHMyf'
+      );
+      
+      googleElements.forEach(el => {
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('height', '0px', 'important');
+      });
+    };
+
+    // Run immediately on mount
+    obliterateGoogleBar();
+
+    // Create an aggressive MutationObserver. 
+    // Since TopBar is always mounted, this instantly fights back if Google tries to inject later.
+    const observer = new MutationObserver(() => {
+      obliterateGoogleBar();
+    });
+
+    // Watch the body and html tags for ANY style changes
+    observer.observe(document.body, { 
+      attributes: true, 
+      attributeFilter: ['style'], 
+      childList: true 
+    });
+    observer.observe(document.documentElement, { 
+      attributes: true, 
+      attributeFilter: ['style'] 
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
   // Set Greeting
   useEffect(() => {
     const hour = new Date().getHours();
@@ -98,7 +143,7 @@ export default function TopBar({ user, onSignOut }) {
     }
   };
 
-  // 🛑 Mark non-actionable notifications (follows/ratings) as read and route to user
+  // Mark non-actionable notifications (follows/ratings) as read and route to user
   const handleReadAndNavigate = async (notif) => {
     try {
       const token = localStorage.getItem('collab_token');
@@ -120,7 +165,7 @@ export default function TopBar({ user, onSignOut }) {
     }
   };
 
-  // 🛑 FIX: Unified logic for what makes a notification "visible" in the dropdown
+  // Unified logic for what makes a notification "visible" in the dropdown
   const visibleNotifications = notifications.filter(n => {
     if (n.type === 'invite') return n.status === 'pending';
     return !n.isRead; // For social alerts (follows, ratings)
@@ -135,7 +180,7 @@ export default function TopBar({ user, onSignOut }) {
       <div>
         <h1 className="text-3xl font-light text-theme-text flex items-center gap-2 transition-colors duration-300">
           {greeting},{' '}
-          <span className="text-[#FF2D88] font-semibold">
+          <span className="text-theme-accent font-semibold">
             {user ? user.firstName : 'Visitor'}
           </span>
         </h1>
@@ -154,9 +199,10 @@ export default function TopBar({ user, onSignOut }) {
           <div className="relative" ref={projectRef}>
             <button 
               onClick={() => setShowProjectDropdown(!showProjectDropdown)}
-              className="flex items-center gap-2 bg-theme-panel border border-theme-border hover:border-[#FF2D88]/50 text-theme-text px-4 py-2.5 rounded-xl text-sm font-medium transition-all shadow-sm"
+              style={{ backgroundColor: 'var(--theme-accent)' }}
+              className="flex items-center gap-2 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-all shadow-md hover:shadow-lg hover:opacity-90 active:scale-95"
             >
-              <Briefcase size={16} className="text-[#FF2D88]"/> 
+              <Briefcase size={16} className="text-white"/> 
               <span className="max-w-[120px] truncate">
                 {activeProject ? activeProject.name : 'Select Project'}
               </span>
@@ -176,7 +222,7 @@ export default function TopBar({ user, onSignOut }) {
                           switchProject(proj._id);
                           setShowProjectDropdown(false);
                         }}
-                        className={`w-full text-left flex flex-col p-3 rounded-lg transition-colors ${activeProject?._id === proj._id ? 'bg-[#FF2D88]/10 text-[#FF2D88]' : 'hover:bg-black/5 dark:hover:bg-white/5 text-theme-text'}`}
+                        className={`w-full text-left flex flex-col p-3 rounded-lg transition-colors ${activeProject?._id === proj._id ? 'bg-theme-accent bg-opacity-10 text-theme-accent' : 'hover:bg-black/5 dark:hover:bg-white/5 text-theme-text'}`}
                       >
                         <span className="font-bold text-sm">{proj.name}</span>
                         <span className="text-[10px] uppercase tracking-wider opacity-70">
@@ -187,7 +233,7 @@ export default function TopBar({ user, onSignOut }) {
                   )}
                 </div>
                 <div className="border-t border-theme-border p-2">
-                  <button onClick={() => { navigate('/members'); setShowProjectDropdown(false); }} className="w-full text-center text-xs font-bold text-[#FF2D88] hover:bg-[#FF2D88]/10 py-2 rounded-lg transition-colors">
+                  <button onClick={() => { navigate('/members'); setShowProjectDropdown(false); }} className="w-full text-center text-xs font-bold text-theme-accent hover:bg-theme-accent hover:bg-opacity-10 py-2 rounded-lg transition-colors">
                     + Manage Workspaces
                   </button>
                 </div>
@@ -199,7 +245,7 @@ export default function TopBar({ user, onSignOut }) {
         {/* 2. THEME TOGGLE */}
         <button 
           onClick={toggleTheme}
-          className="text-theme-muted hover:text-theme-text bg-theme-panel p-2.5 rounded-full border border-theme-border transition-all duration-500 hover:scale-110 hover:shadow-[0_0_15px_rgba(255,45,136,0.1)] active:rotate-90"
+          className="text-theme-muted hover:text-theme-text bg-theme-panel p-2.5 rounded-full border border-theme-border transition-all duration-500 hover:scale-110 active:rotate-90"
           title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
         >
           {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -217,7 +263,7 @@ export default function TopBar({ user, onSignOut }) {
             >
               <Bell size={20} />
               {pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#FF2D88] text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border-2 border-theme-bg">
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-theme-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-pulse border-2 border-theme-bg">
                   {pendingCount}
                 </span>
               )}
@@ -227,19 +273,18 @@ export default function TopBar({ user, onSignOut }) {
               <div className="absolute right-0 top-full mt-3 w-80 bg-theme-panel border border-theme-border rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="p-4 border-b border-theme-border flex items-center justify-between bg-black/5 dark:bg-white/5">
                   <h4 className="font-bold text-sm text-theme-text">Notifications</h4>
-                  {pendingCount > 0 && <span className="text-[10px] bg-[#FF2D88]/10 text-[#FF2D88] px-2 py-0.5 rounded font-bold">{pendingCount} New</span>}
+                  {pendingCount > 0 && <span className="text-[10px] bg-theme-accent bg-opacity-10 text-theme-accent px-2 py-0.5 rounded font-bold">{pendingCount} New</span>}
                 </div>
 
                 <div className="max-h-80 overflow-y-auto premium-scrollbar p-2 space-y-2">
                   
-                  {/* 🛑 FIX: Safely map over the unified visibleNotifications array */}
                   {visibleNotifications.length === 0 ? (
                     <p className="text-xs text-theme-muted text-center py-8 font-medium">You're all caught up!</p>
                   ) : (
                     visibleNotifications.map((notif) => (
                       <div key={notif._id} className="p-3 bg-black/5 dark:bg-[#0A0D14] border border-theme-border rounded-xl space-y-3 relative group transition-colors hover:border-theme-muted/50">
                         <div className="flex items-start gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-theme-accent flex-shrink-0 flex items-center justify-center text-white text-xs font-bold shadow-sm overflow-hidden">
                             {notif.sender?.profilePic 
                               ? <img src={notif.sender.profilePic} alt="avatar" className="w-full h-full object-cover"/> 
                               : notif.sender?.firstName ? notif.sender.firstName.charAt(0).toUpperCase() : 'U'}
@@ -249,7 +294,7 @@ export default function TopBar({ user, onSignOut }) {
                             {notif.type === 'invite' ? (
                               <>
                                 <p className="text-[11px] text-theme-muted leading-snug">
-                                  <span className="font-bold text-theme-text">{notif.sender?.firstName} {notif.sender?.lastName}</span> invited you to join <strong className="text-[#FF2D88]">{notif.project?.name}</strong>.
+                                  <span className="font-bold text-theme-text">{notif.sender?.firstName} {notif.sender?.lastName}</span> invited you to join <strong className="text-theme-accent">{notif.project?.name}</strong>.
                                 </p>
                                 <span className="inline-block mt-1 bg-white/10 dark:bg-white/5 text-theme-text text-[10px] px-2 py-0.5 rounded border border-theme-border font-medium">
                                   Role: {notif.roleOffered}
@@ -305,7 +350,7 @@ export default function TopBar({ user, onSignOut }) {
                 onClick={() => navigate('/profile')}
                 title="Go to User Profile"
               >
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B28CC] to-[#FF2D88] flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-transparent hover:ring-theme-muted transition-all overflow-hidden">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#3B28CC] to-theme-accent flex items-center justify-center text-white font-bold text-lg shadow-md ring-2 ring-transparent hover:ring-theme-muted transition-all overflow-hidden">
                   {user.profilePic ? (
                     <img src={user.profilePic} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -322,7 +367,7 @@ export default function TopBar({ user, onSignOut }) {
 
               <button 
                 onClick={onSignOut}
-                className="text-theme-muted hover:text-[#FF2D88] p-2 rounded-xl hover:bg-[#FF2D88]/10 transition-all ml-1 group"
+                className="text-theme-muted hover:text-theme-accent p-2 rounded-xl hover:bg-theme-accent hover:bg-opacity-10 transition-all ml-1 group"
                 title="Sign Out"
               >
                 <LogOut size={18} className="group-hover:translate-x-0.5 transition-transform" />
@@ -331,7 +376,7 @@ export default function TopBar({ user, onSignOut }) {
           ) : (
             <button 
               onClick={() => navigate('/auth')}
-              className="bg-theme-panel border border-theme-border hover:border-[#FF2D88]/50 text-theme-text px-7 py-2.5 rounded-xl text-sm font-medium transition-all"
+              className="bg-theme-panel border border-theme-border hover:border-theme-accent hover:border-opacity-50 text-theme-text px-7 py-2.5 rounded-xl text-sm font-medium transition-all"
             >
               Sign In
             </button>

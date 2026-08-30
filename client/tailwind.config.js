@@ -7,15 +7,14 @@ export default {
   ],
   theme: {
     extend: {
-      // We inject our custom CSS variables here
+      // 🛑 THE FIX: Flattened the colors object so classes are just 'bg-theme-accent'
       colors: {
-        theme: {
-          bg: 'var(--color-bg-main)',
-          panel: 'var(--color-bg-panel)',
-          text: 'var(--color-text-main)',
-          muted: 'var(--color-text-muted)',
-          border: 'var(--color-border)',
-        }
+        'theme-accent': 'var(--theme-accent, #FF2D88)', // Falls back to pink
+        'theme-bg': 'var(--theme-bg, #FFFFFF)', 
+        'theme-panel': 'var(--theme-panel, #F5F5F5)', 
+        'theme-text': 'var(--theme-text, #333333)', 
+        'theme-muted': 'var(--theme-muted, #666666)', 
+        'theme-border': 'var(--theme-border, #CCCCCC)', 
       }
     },
   },

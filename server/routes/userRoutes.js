@@ -11,5 +11,6 @@ router.post('/:id/rate', protect, userController.rateUser);
 router.put('/email', protect, userController.updateEmail);
 router.put('/password', protect, userController.updatePassword);
 router.put('/preferences', protect, userController.updatePreferences);
+router.put('/settings', protect, userController.updatePreferences); 
 
 module.exports = router;

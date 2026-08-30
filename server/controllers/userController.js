@@ -10,7 +10,7 @@ exports.getUserProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found in database' });
     }
 
-    const isFollowedByMe = user.followers?.includes(req.user._id);
+    const isFollowedByMe = user.followers?.some(id => id.toString() === req.user._id.toString());
     const myRatingObj = user.ratings?.find(r => r.rater.toString() === req.user._id.toString());
     const myRating = myRatingObj ? myRatingObj.score : 0;
     
@@ -53,27 +53,24 @@ exports.toggleFollow = async (req, res) => {
       return res.status(400).json({ message: "You cannot follow yourself" });
     }
 
-    // Safety initialization
     if (!targetUser.followers) targetUser.followers = [];
     if (!currentUser.following) currentUser.following = [];
 
-    const isFollowing = targetUser.followers.includes(currentUser._id);
+    const isFollowing = targetUser.followers.some(id => id.toString() === currentUser._id.toString());
 
     if (isFollowing) {
-      targetUser.followers.pull(currentUser._id);
-      currentUser.following.pull(targetUser._id);
+      targetUser.followers = targetUser.followers.filter(id => id.toString() !== currentUser._id.toString());
+      currentUser.following = currentUser.following.filter(id => id.toString() !== targetUser._id.toString());
     } else {
       targetUser.followers.push(currentUser._id);
       currentUser.following.push(targetUser._id);
 
-      // Anti-Spam: Remove previous unread follow notifications from this user
       await Notification.deleteMany({
         recipient: targetUser._id,
         sender: currentUser._id,
         type: 'follow'
       });
 
-      // Fire Database Notification
       await Notification.create({
         recipient: targetUser._id,
         sender: currentUser._id,
@@ -107,6 +104,9 @@ exports.rateUser = async (req, res) => {
     if (targetUser._id.toString() === currentUser._id.toString()) {
       return res.status(400).json({ message: "You cannot rate yourself" });
     }
+    if (rating < 1 || rating > 5) {
+      return res.status(400).json({ message: "Rating must be between 1 and 5" });
+    }
 
     if (!targetUser.ratings) targetUser.ratings = [];
 
@@ -122,14 +122,12 @@ exports.rateUser = async (req, res) => {
     const totalScore = targetUser.ratings.reduce((acc, curr) => acc + curr.score, 0);
     const averageRating = (totalScore / targetUser.ratings.length).toFixed(1);
 
-    // Anti-Spam: Remove previous unread rating notifications
     await Notification.deleteMany({
       recipient: targetUser._id,
       sender: currentUser._id,
       type: 'rating'
     });
 
-    // Fire Database Notification
     await Notification.create({
       recipient: targetUser._id,
       sender: currentUser._id,
@@ -149,9 +147,9 @@ exports.rateUser = async (req, res) => {
 exports.updateEmail = async (req, res) => {
   try {
     const { newEmail } = req.body;
+    const normalizedEmail = newEmail.toLowerCase().trim();
 
-    // Check if email is already in use by someone else
-    const emailExists = await User.findOne({ email: newEmail });
+    const emailExists = await User.findOne({ email: normalizedEmail });
     if (emailExists) {
       return res.status(400).json({ message: 'Email is already in use.' });
     }
@@ -159,7 +157,7 @@ exports.updateEmail = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.email = newEmail;
+    user.email = normalizedEmail;
     await user.save();
 
     res.status(200).json({ message: 'Email updated successfully', email: user.email });
@@ -173,15 +171,18 @@ exports.updateEmail = async (req, res) => {
 exports.updatePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const user = await User.findById(req.user._id);
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
 
-    // Verify current password
+    const user = await User.findById(req.user._id);
     const isMatch = await bcrypt.compare(currentPassword, user.password);
+    
     if (!isMatch) {
       return res.status(400).json({ message: 'Incorrect current password' });
     }
 
-    // Hash the new password
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
@@ -196,23 +197,19 @@ exports.updatePassword = async (req, res) => {
 // 6. Update App Preferences (Settings Panel)
 exports.updatePreferences = async (req, res) => {
   try {
-    const preferences = req.body; 
+    // Dynamically builds the update object based ONLY on what the frontend sends
+    const { preferences } = req.body; 
+    const updateQuery = {};
     
+    if (preferences) {
+      Object.keys(preferences).forEach(key => {
+        updateQuery[`preferences.${key}`] = preferences[key];
+      });
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
-      {
-        $set: {
-          'preferences.accentColor': preferences.accentColor,
-          'preferences.language': preferences.language,
-          'preferences.timezone': preferences.timezone,
-          'preferences.aiResponseStyle': preferences.responseStyle,
-          'preferences.customGreeting': preferences.customGreeting,
-          'preferences.twoFactorEnabled': preferences.twoFactorEnabled,
-          'preferences.pinSidebarByDefault': preferences.pinSidebarByDefault,
-          'preferences.slHolidayAlerts': preferences.slHolidayAlerts,
-          'preferences.defaultShareRole': preferences.defaultShareRole,
-        }
-      },
+      { $set: updateQuery },
       { new: true, runValidators: true }
     );
 
