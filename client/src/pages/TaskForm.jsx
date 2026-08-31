@@ -5,18 +5,18 @@ import {
   Users, UploadCloud, Loader2, Check, AlertCircle, X, Briefcase
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; 
 
 export default function TaskForm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { activeProject } = useProject(); // 👈 Global Brain integration
+  const { activeProject } = useProject(); 
   
   const initialStatus = searchParams.get('status') || 'todo';
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
-  // --- FORM STATE ---
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -29,25 +29,18 @@ export default function TaskForm() {
   });
 
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [teamMembers, setTeamMembers] = useState([]); // 👈 Replaces MOCK_TEAM
+  const [teamMembers, setTeamMembers] = useState([]); 
   const [isLoadingTeam, setIsLoadingTeam] = useState(false);
 
   const AVAILABLE_TAGS = ['UI/UX', 'Frontend', 'Backend', 'Database', 'Logic', 'DevOps', 'Bug', 'Testing'];
 
-  // --- FETCH ACTUAL TEAM MEMBERS ---
   useEffect(() => {
     if (activeProject) {
       const fetchMembers = async () => {
         setIsLoadingTeam(true);
         try {
-          const token = localStorage.getItem('collab_token');
-          const response = await fetch(`http://localhost:5000/api/members?projectId=${activeProject._id}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          if (response.ok) {
-            const data = await response.json();
-            setTeamMembers(data);
-          }
+          const data = await apiFetch(`/api/members?projectId=${activeProject._id}`);
+          setTeamMembers(data);
         } catch (err) {
           console.error("Failed to load team members", err);
         } finally {
@@ -58,7 +51,6 @@ export default function TaskForm() {
     }
   }, [activeProject]);
 
-  // --- HANDLERS ---
   const handleTagToggle = (tag) => {
     setFormData(prev => ({
       ...prev,
@@ -113,7 +105,6 @@ export default function TaskForm() {
     try {
       const token = localStorage.getItem('collab_token');
       
-      // 🛑 Construct FormData for files + text + arrays + PROJECT ID
       const submitData = new FormData();
       submitData.append('projectId', activeProject._id);
       submitData.append('title', formData.title);
@@ -123,11 +114,9 @@ export default function TaskForm() {
       if (formData.startDate) submitData.append('startDate', formData.startDate);
       if (formData.dueDate) submitData.append('dueDate', formData.dueDate);
       
-      // Arrays must be stringified when sent via FormData
       submitData.append('tags', JSON.stringify(formData.tags));
       submitData.append('assignees', JSON.stringify(formData.assignees));
 
-      // Append all physical files
       selectedFiles.forEach((file) => {
         submitData.append('attachments', file);
       });
@@ -136,7 +125,6 @@ export default function TaskForm() {
         method: 'POST',
         headers: { 
           Authorization: `Bearer ${token}` 
-          // Do NOT set Content-Type header when using FormData
         },
         body: submitData
       });
@@ -153,7 +141,6 @@ export default function TaskForm() {
     }
   };
 
-  // --- RENDER NO PROJECT STATE ---
   if (!activeProject) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center animate-fade-in">
@@ -165,11 +152,9 @@ export default function TaskForm() {
     );
   }
 
-  // --- RENDER FORM ---
   return (
     <div className="p-8 w-full max-w-7xl mx-auto h-[calc(100vh-80px)] flex flex-col animate-fade-in text-gray-900 dark:text-white overflow-y-auto custom-scrollbar">
       
-      {/* HEADER */}
       <div className="flex items-center justify-between mb-8 flex-shrink-0">
         <div className="flex items-center gap-4">
           <button 
@@ -216,10 +201,8 @@ export default function TaskForm() {
         </div>
       )}
 
-      {/* TWO-COLUMN FORM LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8 flex-1">
         
-        {/* LEFT COLUMN: Main Details */}
         <div className="lg:col-span-2 space-y-6">
           
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm">
@@ -242,7 +225,6 @@ export default function TaskForm() {
             />
           </div>
 
-          {/* Tags & Categories */}
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Tag size={14}/> Categories & Tags
@@ -265,7 +247,6 @@ export default function TaskForm() {
             </div>
           </div>
 
-          {/* File Upload Dropzone */}
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <UploadCloud size={14}/> Attachments (Max 5)
@@ -301,10 +282,8 @@ export default function TaskForm() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Settings & Metadata */}
         <div className="space-y-6">
           
-          {/* Status & Priority */}
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm space-y-5">
             <div>
               <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 block">Column Status</label>
@@ -334,7 +313,6 @@ export default function TaskForm() {
             </div>
           </div>
 
-          {/* Timeline & Calendar Dates */}
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm space-y-5">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-2">
               <CalendarIcon size={14}/> Schedule
@@ -361,7 +339,6 @@ export default function TaskForm() {
             </div>
           </div>
 
-          {/* Assignees - DYNAMICALLY LOADED FROM BACKEND */}
           <div className="bg-white dark:bg-[#121629] p-6 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm flex flex-col max-h-[400px]">
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2 flex-shrink-0">
               <Users size={14}/> Assign Team Members

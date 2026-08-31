@@ -3,28 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, GitCommit, Plus, MoreVertical, MessageSquare, 
   Paperclip, User, AlertCircle, Loader2,
-  ArrowUpDown, Check, Briefcase, Star // 👈 NEW: Imported Star icon
+  ArrowUpDown, Check, Briefcase, Star
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 NEW: Imported API helper
 
 export default function Tasks() {
   const navigate = useNavigate();
   const { activeProject } = useProject();
 
-  // --- IDENTIFY CURRENT USER ---
   const currentUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
   const currentUserId = currentUser._id || currentUser.id;
 
-  // --- STATE ---
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [sortBy, setSortBy] = useState('newest');
   const [filterAssignee, setFilterAssignee] = useState('all');
 
-  // --- DATA FETCHING (SANDBOXED TO PROJECT) ---
   useEffect(() => {
     if (activeProject) {
       fetchTasks();
@@ -38,12 +35,8 @@ export default function Tasks() {
     setIsLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!response.ok) throw new Error('Failed to fetch tasks from server');
-      const data = await response.json();
+      // 👈 NEW: Replaced 7 lines of fetch logic with 1 clean apiFetch call
+      const data = await apiFetch(`/api/tasks?projectId=${activeProject._id}`);
       setTasks(data || []);
     } catch (err) {
       setError(err.message);
@@ -52,11 +45,10 @@ export default function Tasks() {
     }
   };
 
-  // --- TOGGLE STAR LOGIC ---
   const handleToggleStar = async (e, taskId) => {
-    e.stopPropagation(); // Prevents the card click event from opening the Task Detail page
+    e.stopPropagation(); 
 
-    // 1. Optimistic UI Update (Instant feedback)
+    // Optimistic UI Update
     setTasks(prevTasks => prevTasks.map(task => {
       if (task._id === taskId) {
         const starredBy = task.starredBy || [];
@@ -65,29 +57,23 @@ export default function Tasks() {
         return {
           ...task,
           starredBy: isCurrentlyStarred
-            ? starredBy.filter(id => id !== currentUserId) // Remove star
-            : [...starredBy, currentUserId]                // Add star
+            ? starredBy.filter(id => id !== currentUserId) 
+            : [...starredBy, currentUserId] 
         };
       }
       return task;
     }));
 
-    // 2. Background API Call
+    // Background API Call
     try {
-      const token = localStorage.getItem('collab_token');
-      const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/star`, {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!res.ok) throw new Error('Failed to sync star status with server');
+      // 👈 NEW: Removed manual headers and localhost URLs
+      await apiFetch(`/api/tasks/${taskId}/star`, { method: 'PUT' });
     } catch (err) {
       console.error(err);
-      // If it fails, revert the state by re-fetching (fail-safe)
-      fetchTasks(); 
+      fetchTasks(); // Revert state on failure
     }
   };
 
-  // --- ADVANCED FILTERING & SORTING ENGINE ---
   const uniqueAssignees = [...new Set(tasks.flatMap(t => t.assignees?.map(a => a.name) || []))].filter(Boolean);
 
   const processedTasks = [...tasks]
@@ -106,7 +92,6 @@ export default function Tasks() {
       return 0;
     });
 
-  // --- KANBAN CONFIGURATION ---
   const columns = [
     { id: 'todo', title: 'To do', color: '#A855F7', border: 'border-purple-500', bg: 'bg-purple-100 dark:bg-purple-500/10', text: 'text-purple-600 dark:text-purple-400' },
     { id: 'in-progress', title: 'In progress', color: '#3B82F6', border: 'border-blue-500', bg: 'bg-blue-100 dark:bg-blue-500/10', text: 'text-blue-600 dark:text-blue-400' },
@@ -116,7 +101,6 @@ export default function Tasks() {
 
   const getTasksByStatus = (statusId) => processedTasks.filter(task => task.status === statusId);
 
-  // --- RENDER 1: NO PROJECT SELECTED ---
   if (!activeProject && !isLoading) {
     return (
       <div className="flex-1 w-full flex items-center justify-center animate-fade-in p-8">
@@ -139,7 +123,6 @@ export default function Tasks() {
     );
   }
 
-  // --- RENDER 2: LOADING ---
   if (isLoading) {
     return (
       <div className="h-full w-full flex items-center justify-center">
@@ -148,10 +131,8 @@ export default function Tasks() {
     );
   }
 
-  // --- RENDER 3: ACTIVE KANBAN BOARD ---
   return (
     <div className="w-full flex flex-col animate-fade-in text-gray-900 dark:text-white" onClick={() => setActiveDropdown(null)}>
-      
       <style dangerouslySetInnerHTML={{__html: `
         .glass-scroll::-webkit-scrollbar { height: 8px; }
         .glass-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
@@ -159,7 +140,6 @@ export default function Tasks() {
         .glass-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 45, 136, 0.5); }
       `}} />
 
-      {/* HEADER SECTION */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
@@ -171,8 +151,7 @@ export default function Tasks() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          
-          <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
+          <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)]">
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 bg-[#FF2D88] text-white shadow-[0_0_15px_rgba(255,45,136,0.4)]">
               <LayoutGrid size={16} /> Board
             </button>
@@ -186,7 +165,6 @@ export default function Tasks() {
 
           <div className="w-px h-8 bg-gray-300 dark:bg-white/10 mx-1"></div>
 
-          {/* Assignee Filter Dropdown */}
           <div className="relative">
             <button 
               onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'assignee' ? null : 'assignee'); }} 
@@ -219,7 +197,6 @@ export default function Tasks() {
             )}
           </div>
 
-          {/* Sort Dropdown */}
           <div className="relative">
             <button 
               onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === 'sort' ? null : 'sort'); }} 
@@ -264,19 +241,15 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* THE HOLY GRAIL HEIGHT CALCULATION FOR INFINITY SCROLL FIX */}
       <div 
         className="flex gap-6 overflow-x-auto pb-4 items-stretch glass-scroll"
         style={{ height: 'calc(100vh - 240px)', minHeight: '500px' }}
       >
-        
         {columns.map((col) => {
           const colTasks = getTasksByStatus(col.id);
           
           return (
             <div key={col.id} className="min-w-[320px] w-[320px] h-full flex flex-col bg-gray-50 dark:bg-[#0A0D14] rounded-2xl border border-gray-200 dark:border-white/5 shadow-sm overflow-hidden">
-              
-              {/* COLUMN HEADER */}
               <div className={`p-4 border-t-4 ${col.border} flex items-center justify-between bg-white dark:bg-[#121629] flex-shrink-0 border-b border-gray-100 dark:border-transparent`}>
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full`} style={{ backgroundColor: col.color }} />
@@ -285,7 +258,6 @@ export default function Tasks() {
                 </div>
               </div>
 
-              {/* TASK LIST */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {colTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 opacity-50">
@@ -310,7 +282,6 @@ export default function Tasks() {
                             {task.priority || 'Normal'}
                           </span>
                           
-                          {/* ⭐ NEW: Star Toggle & More Icon */}
                           <div className="flex items-center gap-2">
                             <button 
                               onClick={(e) => handleToggleStar(e, task._id)}
@@ -370,7 +341,6 @@ export default function Tasks() {
                 )}
               </div>
               
-              {/* BOTTOM COLUMN NEW TASK BUTTON */}
               <div className="mt-auto p-3 border-t border-gray-200 dark:border-white/5 bg-white dark:bg-[#121629] flex-shrink-0">
                 <button 
                   onClick={() => navigate(`/tasks/new?status=${col.id}`)} 

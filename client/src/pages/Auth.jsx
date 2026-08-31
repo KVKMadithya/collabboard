@@ -30,8 +30,8 @@ export default function Auth({ onLoginSuccess }) {
   const [fade, setFade] = useState(true);
   const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
 
-  // 🛑 NEW: Centralized dynamic API URL
-  const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
+  // ⚡ Automatically strips trailing slashes to prevent //api route errors
+  const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000').replace(/\/$/, '');
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -74,7 +74,6 @@ export default function Auth({ onLoginSuccess }) {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     
     try {
-      // 👇 Updated to use API_URL
       const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,7 +94,6 @@ export default function Auth({ onLoginSuccess }) {
       }
     } catch (err) {
       console.error("Auth Error:", err);
-      // 👇 Removed hardcoded IP from error message
       setError(err.message === 'Failed to fetch' 
         ? 'Cannot connect to the server. Is the backend running?' 
         : err.message);
@@ -109,7 +107,6 @@ export default function Auth({ onLoginSuccess }) {
       setIsLoading(true);
       setError('');
       try {
-        // 👇 Updated to use API_URL
         const res = await fetch(`${API_URL}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -130,7 +127,6 @@ export default function Auth({ onLoginSuccess }) {
         }
       } catch (err) {
         console.error("Google Auth Error:", err);
-        // 👇 Removed hardcoded IP from error message
         setError(err.message === 'Failed to fetch' 
           ? 'Cannot connect to the server. Is the backend running?' 
           : err.message);
@@ -146,7 +142,6 @@ export default function Auth({ onLoginSuccess }) {
       className="flex h-screen w-full bg-[#05060A] text-white font-sans relative overflow-hidden"
       onMouseMove={handleMouseMove}
     >
-      
       {/* --- Global Background Effects --- */}
       <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#FF2D88]/20 rounded-full blur-[140px] pointer-events-none mix-blend-screen z-0"></div>
       <div className="absolute bottom-1/4 right-1/4 w-[600px] h-[600px] bg-[#FF7A00]/15 rounded-full blur-[150px] pointer-events-none mix-blend-screen z-0"></div>
@@ -162,7 +157,6 @@ export default function Auth({ onLoginSuccess }) {
       {/* --- Left Side: Transparent & Popping Typography --- */}
       <div className="hidden lg:flex w-1/2 relative flex-col justify-center items-center z-10 pointer-events-none">
         <div className="text-center space-y-6 p-12 mx-12">
-          
           <h1 className="text-6xl font-extrabold tracking-tight drop-shadow-[0_10px_25px_rgba(255,45,136,0.3)]">
             <span className="text-[#FF2D88]">📌</span> CollabBoard
           </h1>
@@ -172,14 +166,12 @@ export default function Auth({ onLoginSuccess }) {
               {texts[textIndex]}
             </p>
           </div>
-          
         </div>
       </div>
 
       {/* --- Right Side: Glassmorphism Auth Form --- */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 sm:p-12 relative overflow-y-auto custom-scrollbar z-10 bg-white/[0.02] backdrop-blur-2xl border-l border-white/5 shadow-[-20px_0_40px_-10px_rgba(0,0,0,0.5)]">
         <div className="w-full max-w-md space-y-8 z-20">
-          
           <div>
             <h2 className="text-3xl font-bold tracking-tight">
               {isLogin ? 'Sign in to your account' : 'Create an account'}
@@ -196,7 +188,6 @@ export default function Auth({ onLoginSuccess }) {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            
             {!isLogin && (
               <>
                 <div className="flex gap-4">
