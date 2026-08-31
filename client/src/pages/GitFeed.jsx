@@ -9,6 +9,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 Centralized API utility
 
 // 🛑 100% FOOLPROOF FIX: Custom GitHub Icon component
 const GithubIcon = ({ size = 24, className = "" }) => (
@@ -62,22 +63,14 @@ export default function GitFeed({ user }) {
       setError(null);
 
       try {
-        const token = localStorage.getItem('collab_token');
-        const response = await fetch(`http://localhost:5000/api/github/commits?projectId=${activeProject._id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || 'Failed to fetch commits');
-        }
+        // 👈 Replaced localhost fetch with apiFetch
+        const data = await apiFetch(`/api/github/commits?projectId=${activeProject._id}`);
 
         setCommits(data);
         generateChartData(data);
       } catch (err) {
         console.error(err);
-        setError(err.message);
+        setError(err.message || 'Failed to fetch commits');
       } finally {
         setIsLoading(false);
       }
@@ -95,25 +88,17 @@ export default function GitFeed({ user }) {
     setError(null);
 
     try {
-      const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/projects/${activeProject._id}/github`, {
+      // 👈 Replaced localhost fetch with apiFetch
+      const data = await apiFetch(`/api/projects/${activeProject._id}/github`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}` 
-        },
         body: JSON.stringify({ githubRepo: repoInput })
       });
-
-      const data = await response.json();
-
-      if (!response.ok) throw new Error(data.message || 'Failed to link repository');
 
       // Update UI instantly
       setLocalRepo(data.githubRepo);
       await fetchProjects(); // Refresh global context silently
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to link repository');
     } finally {
       setIsLinking(false);
     }
@@ -145,7 +130,6 @@ export default function GitFeed({ user }) {
   };
 
   // --- UTILS ---
-  // 🛑 FIX: Safely extract the ID whether the leader is populated (an object) or just an ID string
   const isLeader = (activeProject?.leader?._id || activeProject?.leader) === user?._id;
 
   const getRelativeTime = (dateString) => {
@@ -215,7 +199,6 @@ export default function GitFeed({ user }) {
         <div className="w-full max-w-2xl mx-auto mt-10">
           <div className="bg-white dark:bg-[#121629] rounded-[2rem] border border-gray-200 dark:border-white/5 shadow-2xl p-10 text-center relative overflow-hidden">
             
-            {/* Background Glow */}
             <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-[#FF2D88]/10 blur-[80px] rounded-full pointer-events-none"></div>
 
             <div className="w-20 h-20 bg-gray-100 dark:bg-black/40 rounded-full flex items-center justify-center mx-auto mb-6 border border-gray-200 dark:border-white/10 relative z-10">

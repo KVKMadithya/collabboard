@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ChevronLeft, ChevronRight, Bell, Plus, Clock, 
+  ChevronLeft, ChevronRight, Plus, Clock, 
   Calendar as CalendarIcon, Trash2, ArrowRight, MapPin
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 import { SRI_LANKA_HOLIDAYS } from '../utils/sriLankaHolidays';
+import { apiFetch } from '../utils/api'; // 👈 Centralized API utility
 
-// 🛑 PREMIUM COLOR MAPPING DICTIONARY (Matches Legend Exactly)
 const CATEGORIES = {
   Meeting: { color: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
   'Task due': { color: 'bg-orange-500', text: 'text-orange-600 dark:text-orange-400' },
@@ -22,24 +22,19 @@ export default function Calendar() {
   const { activeProject } = useProject();
   const navigate = useNavigate();
 
-  // 1. LIVE CURRENT DATE INITIALIZATION
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Real backend tasks
   const [projectTasks, setProjectTasks] = useState([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
-
-  // Reminders State (Starts empty, no hardcoded phantom tasks)
   const [reminders, setReminders] = useState([]);
 
-  // Form Inputs
   const [title, setTitle] = useState('');
   const [linkedTaskId, setLinkedTaskId] = useState('');
   const [reminderTime, setReminderTime] = useState('05:00 PM');
   const [category, setCategory] = useState('Meeting');
 
-  // Fetch real project tasks
+  // Fetch real project tasks using apiFetch
   useEffect(() => {
     if (activeProject) {
       fetchTasks();
@@ -51,14 +46,8 @@ export default function Calendar() {
   const fetchTasks = async () => {
     setIsLoadingTasks(true);
     try {
-      const token = localStorage.getItem('collab_token');
-      const res = await fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProjectTasks(data || []);
-      }
+      const data = await apiFetch(`/api/tasks?projectId=${activeProject._id}`);
+      setProjectTasks(data || []);
     } catch (err) {
       console.error("Failed to load tasks for calendar", err);
     } finally {
@@ -66,7 +55,6 @@ export default function Calendar() {
     }
   };
 
-  // Month navigation helpers
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -96,7 +84,6 @@ export default function Calendar() {
   const selectedDateKey = formatDateKey(selectedDate);
   const realTodayKey = formatDateKey(new Date());
 
-  // 🛑 THE BRAIN: Aggregate Real Tasks + Reminders + Sri Lankan Holidays
   const getEventsForDate = (dateKey) => {
     const userReminders = reminders.filter((r) => r.date === dateKey);
 
@@ -134,7 +121,6 @@ export default function Calendar() {
         hasScheduledDate = true;
       }
 
-      // Fallback: If no dates are set, stick it on its creation date
       if (!hasScheduledDate && !sDate && !dDate && cDate === dateKey) {
         taskEvents.push({
           id: `created-${t._id}`,
@@ -189,7 +175,6 @@ export default function Calendar() {
     setReminders(prev => prev.filter(r => r.id !== id));
   };
 
-  // --- RENDER 1: NO PROJECT SELECTED ---
   if (!activeProject && !isLoadingTasks) {
     return (
       <div className="flex-1 w-full flex items-center justify-center animate-fade-in p-8">
@@ -212,11 +197,9 @@ export default function Calendar() {
     );
   }
 
-  // --- RENDER 2: CALENDAR UI ---
   return (
     <div className="flex flex-col lg:flex-row h-[calc(100vh-80px)] text-gray-900 dark:text-white gap-6 animate-fade-in p-4 lg:p-8 max-w-[1600px] mx-auto w-full">
       
-      {/* Ultra-thin scrollbar CSS specifically for calendar panels */}
       <style dangerouslySetInnerHTML={{__html: `
         .cal-scroll::-webkit-scrollbar { width: 6px; }
         .cal-scroll::-webkit-scrollbar-track { background: transparent; }
@@ -224,10 +207,8 @@ export default function Calendar() {
         .cal-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 45, 136, 0.5); }
       `}} />
 
-      {/* LEFT SECTION: CALENDAR GRID */}
       <div className="flex-1 flex flex-col bg-white dark:bg-[#060813] border border-gray-200 dark:border-white/10 rounded-2xl p-6 shadow-sm min-h-0 overflow-y-auto cal-scroll pr-4">
         
-        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 flex-shrink-0">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -246,7 +227,6 @@ export default function Calendar() {
           </button>
         </div>
 
-        {/* Month Navigation */}
         <div className="flex items-center justify-between mb-6 px-2 flex-shrink-0">
           <h2 className="text-xl font-bold tracking-wide text-gray-800 dark:text-white">
             {monthNames[month]} {year}
@@ -267,21 +247,17 @@ export default function Calendar() {
           </div>
         </div>
 
-        {/* Weekday Labels */}
         <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2 flex-shrink-0">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
             <div key={day} className="py-1">{day}</div>
           ))}
         </div>
 
-        {/* Calendar Days Grid */}
         <div className="grid grid-cols-7 gap-2 text-center flex-1">
-          {/* Empty padding slots before 1st of month */}
           {Array.from({ length: firstDayIndex }).map((_, i) => (
             <div key={`empty-${i}`} className="p-2 opacity-0 pointer-events-none"></div>
           ))}
 
-          {/* Real Month Days */}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const dayNum = i + 1;
             const thisDate = new Date(year, month, dayNum);
@@ -304,7 +280,6 @@ export default function Calendar() {
               >
                 <span className="text-sm mt-1">{dayNum}</span>
 
-                {/* Event Markers */}
                 <div className="flex items-center gap-1 mt-1 mb-1 flex-wrap justify-center max-w-full px-1">
                   {dayEvents.slice(0, 3).map((evt, idx) => (
                     <span
@@ -322,7 +297,6 @@ export default function Calendar() {
           })}
         </div>
 
-        {/* Legend Footer */}
         <div className="flex flex-wrap items-center justify-center gap-5 mt-8 pt-4 border-t border-gray-100 dark:border-white/10 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 flex-shrink-0">
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]"></span><span>Task Start</span></div>
           <div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]"></span><span>Task Due</span></div>
@@ -334,11 +308,8 @@ export default function Calendar() {
 
       </div>
 
-      {/* 🛑 RIGHT SECTION: SCROLLABLE PANEL FIX */}
-      {/* We added overflow-y-auto here so the entire right column scrolls naturally without squishing content */}
       <div className="w-full lg:w-[420px] flex flex-col gap-6 min-h-0 overflow-y-auto cal-scroll pr-2 pb-6">
         
-        {/* Add Reminder Card */}
         <div className="bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-2xl p-6 shadow-sm flex-shrink-0">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">Add Reminder</h2>
           <p className="text-xs text-[#FF2D88] font-bold mt-1 mb-5 uppercase tracking-wider">
@@ -346,7 +317,6 @@ export default function Calendar() {
           </p>
 
           <form onSubmit={handleAddReminder} className="space-y-4">
-            {/* Live Task Linker */}
             <div>
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Link to Task</label>
               <select
@@ -365,7 +335,6 @@ export default function Calendar() {
               </select>
             </div>
 
-            {/* Reminder Title Input */}
             <div>
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Title *</label>
               <input
@@ -378,7 +347,6 @@ export default function Calendar() {
               />
             </div>
 
-            {/* Time & Category */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1.5">Time</label>
@@ -407,7 +375,6 @@ export default function Calendar() {
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               className="w-full mt-2 bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] hover:opacity-90 text-white text-sm font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-[0_4px_14px_rgba(255,45,136,0.3)] hover:-translate-y-0.5"
@@ -418,8 +385,6 @@ export default function Calendar() {
           </form>
         </div>
 
-        {/* Selected Day Schedule Feed */}
-        {/* 🛑 FIXED: Removed min-h-0 and flex-1 so it naturally expands and scrolls nicely inside the parent wrapper */}
         <div className="bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-2xl p-6 shadow-sm flex flex-col flex-shrink-0">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-4">
             Schedule for {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -442,7 +407,6 @@ export default function Calendar() {
                         {item.title}
                       </p>
                       
-                      {/* EXPLICIT HOLIDAY/POYA TAG RENDERING */}
                       {item.isHoliday && (
                         <span className={`mt-2 px-2.5 py-1 text-[9px] uppercase tracking-wider font-bold rounded-md border ${
                           item.category === 'poya' 
@@ -459,7 +423,6 @@ export default function Calendar() {
                     </div>
                   </div>
 
-                  {/* Actions mapping based on item type */}
                   {item.isTask ? (
                     <div className="mt-1">
                       <ArrowRight size={16} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />

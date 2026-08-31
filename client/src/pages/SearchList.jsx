@@ -5,6 +5,7 @@ import {
   ChevronRight, AlertCircle, Briefcase, ExternalLink, Loader2
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 NEW: Using centralized API utility
 
 const HighlightMatch = ({ text = '', query = '' }) => {
   if (!query.trim() || typeof text !== 'string') return <>{text}</>;
@@ -57,8 +58,6 @@ export default function SearchList() {
 
   // --- THE FETCH ENGINE ---
   useEffect(() => {
-    const abortController = new AbortController();
-
     const fetchSearchResults = async () => {
       // If query is empty, reset immediately
       if (!debouncedQuery.trim() || !activeProject) {
@@ -79,18 +78,9 @@ export default function SearchList() {
       setError(null);
 
       try {
-        const token = localStorage.getItem('collab_token');
-        const response = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(debouncedQuery)}&projectId=${activeProject._id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          signal: abortController.signal
-        });
+        // 👈 NEW: Replaced hardcoded localhost fetch with apiFetch utility
+        const data = await apiFetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}&projectId=${activeProject._id}`);
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => null);
-          throw new Error(errorData?.message || "Search route failed.");
-        }
-
-        const data = await response.json();
         setResults({
           tasks: data.tasks || [],
           notes: data.notes || [],
@@ -98,7 +88,6 @@ export default function SearchList() {
         });
 
       } catch (err) {
-        if (err.name === 'AbortError') return; 
         console.error("Search error:", err);
         setError(err.message || "An error occurred while searching. Please try again.");
       } finally {
@@ -108,9 +97,6 @@ export default function SearchList() {
     };
 
     fetchSearchResults();
-
-    return () => abortController.abort(); 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQuery, activeProject]); // Only run when the DEBOUNCED query changes
 
   // --- RENDERS ---

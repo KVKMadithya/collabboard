@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom'; // 👈 Added for the "Go to Workspaces" button
+import { useNavigate } from 'react-router-dom'; 
 import {
   FolderKanban, UploadCloud, CheckCircle2,
   FileText, MoreVertical, Pencil, Trash2, X, Plus,
@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 
-const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/reports`;
-const FILE_BASE = 'http://127.0.0.1:5000';
+const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = `${API_ROOT}/api/reports`;
+const FILE_BASE = API_ROOT; // 👈 FIXED: Dynamic root instead of hardcoded 127.0.0.1
 
 const COLOR_OPTIONS = ['#A855F7', '#EC4899', '#F43F5E', '#3B82F6', '#10B981', '#F59E0B'];
 
@@ -547,7 +548,6 @@ export default function Reports() {
                       <span className="text-[11px] text-theme-muted font-bold">{done}/{total}</span>
                     </div>
                     
-                    {/* Because of the sandbox, everyone viewing this CAN edit it */}
                     <div className="relative">
                       <button
                         onClick={(e) => { e.stopPropagation(); setOpenMenu(openMenu === `module-${m._id}` ? null : `module-${m._id}`); }}

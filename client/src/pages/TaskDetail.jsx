@@ -4,12 +4,13 @@ import {
   ArrowLeft, Check, Edit2, Users, Calendar, 
   Paperclip, ShieldAlert, Tag, Loader2, AlertCircle, Clock, X, Save, Trash2
 } from 'lucide-react';
-import { useProject } from '../context/ProjectContext'; // 👈 Import Global Brain
+import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 Centralized API utility
 
 export default function TaskDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isLeader } = useProject(); // 👈 Pull leader status from context
+  const { isLeader } = useProject(); 
   
   const [task, setTask] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,11 +36,8 @@ export default function TaskDetail() {
   useEffect(() => {
     const fetchTask = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/tasks/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        if (!response.ok) throw new Error('Task not found or server error');
-        const data = await response.json();
+        // 👈 Replaced localhost fetch with apiFetch
+        const data = await apiFetch(`/api/tasks/${id}`);
         setTask(data);
         
         // Populate the edit form with current data
@@ -52,34 +50,28 @@ export default function TaskDetail() {
           dueDate: data.dueDate ? data.dueDate.split('T')[0] : ''
         });
       } catch (err) {
-        setError(err.message);
+        setError(err.message || 'Task not found or server error');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchTask();
-  }, [id, token]);
+  }, [id]);
 
   const handleSaveChanges = async () => {
     setIsUpdating(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+      // 👈 Replaced localhost fetch with apiFetch
+      const updatedTask = await apiFetch(`/api/tasks/${id}`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
         body: JSON.stringify(editForm)
       });
-
-      if (!response.ok) throw new Error('Failed to update task');
       
-      const updatedTask = await response.json();
       setTask(updatedTask);
       setIsEditing(false); // Close edit mode on success
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Failed to update task');
     } finally {
       setIsUpdating(false);
     }
@@ -88,43 +80,33 @@ export default function TaskDetail() {
   const handleMarkAsDone = async () => {
     setIsUpdating(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${id}`, {
+      // 👈 Replaced localhost fetch with apiFetch
+      await apiFetch(`/api/tasks/${id}`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
         body: JSON.stringify({ status: 'done' })
       });
-
-      if (!response.ok) throw new Error('Failed to mark task as done');
       
-      // 🛑 Instantly navigate back to board so the task "disappears" from view
       navigate('/board');
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Failed to mark task as done');
       setIsUpdating(false);
     }
   };
 
-  // 🛑 NEW: Delete Task Logic
   const handleDeleteTask = async () => {
     const confirmDelete = window.confirm("Are you sure you want to discard and delete this task? This action cannot be undone.");
     if (!confirmDelete) return;
 
     setIsUpdating(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/tasks/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+      // 👈 Replaced localhost fetch with apiFetch
+      await apiFetch(`/api/tasks/${id}`, {
+        method: 'DELETE'
       });
-
-      if (!response.ok) throw new Error('Failed to delete task');
       
-      // Navigate back to the board after successful deletion
       navigate('/board');
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Failed to delete task');
       setIsUpdating(false);
     }
   };
@@ -154,7 +136,6 @@ export default function TaskDetail() {
     );
   }
 
-  // 🛑 PERMISSION LOGIC: Can complete if they are an assignee OR the project leader
   const isAssigned = task.assignees?.some(a => a._id === currentUserId);
   const canCompleteTask = isAssigned || isLeader;
 
@@ -267,7 +248,6 @@ export default function TaskDetail() {
         {/* LEFT COLUMN: Main Information */}
         <div className="lg:col-span-2 space-y-8">
           
-          {/* Description */}
           <div className="bg-white dark:bg-[#121629] p-6 md:p-8 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm">
             <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Edit2 size={16}/> Description
@@ -286,7 +266,6 @@ export default function TaskDetail() {
               </div>
             )}
 
-            {/* Tags (Read-Only on Detail Page) */}
             {task.tags?.length > 0 && !isEditing && (
               <div className="mt-8 pt-6 border-t border-gray-100 dark:border-white/5">
                 <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -303,7 +282,6 @@ export default function TaskDetail() {
             )}
           </div>
 
-          {/* Subtasks (Read-only for now) */}
           <div className="bg-white dark:bg-[#121629] p-6 md:p-8 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm">
             <h3 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Check size={16}/> Subtasks & Checklist
@@ -329,7 +307,6 @@ export default function TaskDetail() {
         <div className="space-y-6">
           
           <div className="bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-2xl p-6 space-y-6 shadow-sm">
-            {/* Assignees */}
             <div>
               <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-3 flex items-center gap-2"><Users size={16}/> Assignees</span>
               <div className="flex flex-wrap gap-2">
@@ -344,7 +321,6 @@ export default function TaskDetail() {
               </div>
             </div>
 
-            {/* Dates */}
             <div className="space-y-4 pt-6 border-t border-gray-100 dark:border-white/5">
               <div>
                 <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block mb-2 flex items-center gap-2"><Calendar size={14}/> Start Date</span>
@@ -383,14 +359,12 @@ export default function TaskDetail() {
             </div>
           </div>
 
-          {/* Action Panel */}
           <div className="bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-2xl p-6 shadow-sm space-y-4">
             <button className="w-full bg-gray-50 dark:bg-[#0A0D14] hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-white py-3 rounded-xl text-sm transition-colors border border-gray-200 dark:border-white/10 flex justify-center items-center gap-2 font-bold shadow-sm">
               <Paperclip size={16} /> View Attachments ({task.attachmentsCount || 0})
             </button>
             
             <div className="pt-2 border-t border-gray-100 dark:border-white/5 space-y-3">
-              {/* MARK AS DONE LOGIC */}
               {canCompleteTask ? (
                 <button 
                   onClick={handleMarkAsDone}
@@ -411,7 +385,6 @@ export default function TaskDetail() {
                 </div>
               )}
 
-              {/* DELETE / DISCARD BUTTON */}
               <button 
                 onClick={handleDeleteTask}
                 disabled={isUpdating}

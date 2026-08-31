@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
 export default function AiAssistant() {
   const { activeProject } = useProject();
   
@@ -17,18 +19,18 @@ export default function AiAssistant() {
 
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef(null);
-  const baseInputRef = useRef(''); // 🛑 THE FIX: Stores text typed before the mic was pressed
+  const baseInputRef = useRef('');
 
   const messagesEndRef = useRef(null);
 
   const savedPrefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
-  const greetingLine = savedPrefs.customGreeting || 'Hello! How can I help with your board today?';
+  const greetingLine = savedPrefs.customGreeting || 'Hello! How can I help with your workspace today?';
   
   const [messages, setMessages] = useState([
     { id: 1, sender: 'ai', text: greetingLine }
   ]);
 
-  // --- INITIALIZE SPEECH RECOGNITION ---
+  // --- SPEECH RECOGNITION SETUP & CLEANUP ---
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -38,16 +40,14 @@ export default function AiAssistant() {
 
       recognition.onresult = (event) => {
         let sessionTranscript = '';
-        // 🛑 THE FIX: Loop through the current session and build a single string
         for (let i = 0; i < event.results.length; i++) {
           sessionTranscript += event.results[i][0].transcript;
         }
-        // Safely combine pre-existing text with the live voice transcription
         setInput((baseInputRef.current ? baseInputRef.current + ' ' : '') + sessionTranscript);
       };
 
       recognition.onerror = (event) => {
-        console.error("Speech recognition error", event.error);
+        console.error("Speech recognition error:", event.error);
         setIsRecording(false);
       };
 
@@ -57,8 +57,16 @@ export default function AiAssistant() {
 
       recognitionRef.current = recognition;
     }
+
+    // Cleanup: Stop microphone if user leaves page while recording
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
   }, []);
 
+  // --- AUTO-SCROLL TO BOTTOM ---
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
@@ -70,7 +78,7 @@ export default function AiAssistant() {
       setIsRecording(false);
     } else {
       if (recognitionRef.current) {
-        baseInputRef.current = input; // 🛑 Capture existing text before starting
+        baseInputRef.current = input;
         recognitionRef.current.start();
         setIsRecording(true);
       } else {
@@ -82,9 +90,13 @@ export default function AiAssistant() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'];
+      const validTypes = [
+        'application/pdf', 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 
+        'text/plain'
+      ];
       if (!validTypes.includes(file.type)) {
-        alert("Please upload a PDF, DOCX, or TXT file.");
+        alert("Please upload a valid PDF, DOCX, or TXT file.");
         return;
       }
       setAttachedFile(file);
@@ -99,7 +111,6 @@ export default function AiAssistant() {
   const handleSend = async (e) => {
     e?.preventDefault();
     
-    // Stop recording automatically if user hits send while speaking
     if (isRecording) {
       recognitionRef.current?.stop();
       setIsRecording(false);
@@ -117,7 +128,7 @@ export default function AiAssistant() {
     
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
-    baseInputRef.current = ''; // Reset base input
+    baseInputRef.current = '';
     
     const fileToSend = attachedFile;
     removeFile();
@@ -137,9 +148,11 @@ export default function AiAssistant() {
 
       const token = localStorage.getItem('collab_token');
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/ai/chat`, {
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: formData
       });
 
@@ -151,14 +164,14 @@ export default function AiAssistant() {
 
       setMessages((prev) => [
         ...prev, 
-        { id: Date.now() + 1, sender: 'ai', text: data.reply || "No reply received from AI." }
+        { id: Date.now() + 1, sender: 'ai', text: data.reply || "No response generated." }
       ]);
 
     } catch (error) {
-      console.error("Fetch Error:", error);
+      console.error("AI Request Error:", error);
       setMessages((prev) => [
         ...prev, 
-        { id: Date.now() + 1, sender: 'ai', text: `⚠️ Connection failed: ${error.message}` }
+        { id: Date.now() + 1, sender: 'ai', text: `⚠️ Connection error: ${error.message}` }
       ]);
     } finally {
       setIsGenerating(false);
@@ -168,7 +181,7 @@ export default function AiAssistant() {
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden text-theme-text pr-6 pb-4 animate-fade-in">
       
-      {/* --- HEADER & CONTEXT TOGGLE --- */}
+      {/* HEADER & CONTEXT TOGGLE */}
       <div className="flex items-center justify-between pb-4 border-b border-theme-border mb-4 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-theme-accent/10 flex items-center justify-center text-theme-accent shadow-sm">
@@ -191,7 +204,7 @@ export default function AiAssistant() {
           </button>
           <button
             onClick={() => {
-              if (!activeProject) alert("Please select a workspace from the TopBar first!");
+              if (!activeProject) alert("Please select a workspace from the top bar first!");
               else setChatMode('workspace');
             }}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
@@ -203,12 +216,12 @@ export default function AiAssistant() {
         </div>
       </div>
 
-      {/* --- CHAT HISTORY AREA --- */}
+      {/* CHAT HISTORY */}
       <div className="flex-1 overflow-y-auto space-y-6 mb-4 pr-4 min-h-0 custom-scrollbar">
         {chatMode === 'workspace' && activeProject && (
           <div className="flex justify-center my-4">
             <span className="bg-theme-accent/10 text-theme-accent border border-theme-accent/20 px-4 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm">
-              <Briefcase size={12} /> Connected to: {activeProject.name} Database
+              <Briefcase size={12} /> Connected to context: {activeProject.name}
             </span>
           </div>
         )}
@@ -248,9 +261,9 @@ export default function AiAssistant() {
         
         {isGenerating && (
           <div className="flex gap-3 justify-start animate-in fade-in">
-             <div className="w-8 h-8 rounded-full bg-theme-panel border border-theme-border flex items-center justify-center text-theme-accent flex-shrink-0 mt-1 shadow-sm">
-                <Bot size={16} />
-              </div>
+            <div className="w-8 h-8 rounded-full bg-theme-panel border border-theme-border flex items-center justify-center text-theme-accent flex-shrink-0 mt-1 shadow-sm">
+              <Bot size={16} />
+            </div>
             <div className="bg-theme-panel border border-theme-border rounded-2xl rounded-tl-sm px-5 py-3.5 flex items-center gap-3 text-theme-muted text-sm shadow-sm">
               <Loader2 size={16} className="animate-spin text-theme-accent" />
               <span>Analyzing data...</span>
@@ -260,9 +273,8 @@ export default function AiAssistant() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* --- INPUT AREA --- */}
+      {/* INPUT AREA */}
       <div className="relative flex-shrink-0">
-        
         {attachedFile && (
           <div className="absolute -top-12 left-0 flex items-center gap-2 bg-theme-panel border border-theme-accent text-theme-text px-3 py-1.5 rounded-lg text-xs shadow-lg animate-in slide-in-from-bottom-2">
             <FileText size={14} className="text-theme-accent" />
@@ -274,7 +286,6 @@ export default function AiAssistant() {
         )}
 
         <form onSubmit={handleSend} className="flex gap-2 bg-theme-panel p-2.5 rounded-2xl border border-theme-border shadow-md relative focus-within:border-theme-accent transition-colors">
-          
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { AreaChart, Area, CartesianGrid, PieChart, Pie, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useProject } from '../context/ProjectContext'; 
+import { apiFetch } from '../utils/api'; // 👈 Centralized API utility
 
 export default function Dashboard() {
   const { activeProject } = useProject();
@@ -46,21 +47,16 @@ export default function Dashboard() {
     const fetchRealData = async () => {
       setIsLoading(true);
       try {
-        const token = localStorage.getItem('collab_token');
-        const headers = { Authorization: `Bearer ${token}` };
         const projectId = activeProject._id;
 
-        const [tasksRes, membersRes, notesRes] = await Promise.all([
-          fetch(`http://localhost:5000/api/tasks?projectId=${projectId}`, { headers }),
-          fetch(`http://localhost:5000/api/members?projectId=${projectId}`, { headers }),
-          fetch(`http://localhost:5000/api/notes?projectId=${projectId}`, { headers })
+        // 👈 NEW: Cleaned up fetches using apiFetch, maintaining the empty array fallback on failure
+        const [tasks, members, notes] = await Promise.all([
+          apiFetch(`/api/tasks?projectId=${projectId}`).catch(() => []),
+          apiFetch(`/api/members?projectId=${projectId}`).catch(() => []),
+          apiFetch(`/api/notes?projectId=${projectId}`).catch(() => [])
         ]);
 
-        const tasks = tasksRes.ok ? await tasksRes.json() : [];
-        const members = membersRes.ok ? await membersRes.json() : [];
-        const notes = notesRes.ok ? await notesRes.json() : [];
-
-        const totalTasks = tasks.length;
+        const totalTasks = tasks.length || 0;
         const completedTasks = tasks.filter(t => t.status === 'done').length;
         
         const now = new Date();
@@ -131,14 +127,11 @@ export default function Dashboard() {
     setIsGenerating(true);
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/ai/chat`, {
+      // 👈 NEW: Simplified POST request using apiFetch
+      const data = await apiFetch(`/api/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: messageText })
       });
-
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Server Error');
 
       setAiMessages((prev) => [
         ...prev, 

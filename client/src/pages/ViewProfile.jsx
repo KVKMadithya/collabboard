@@ -5,6 +5,9 @@ import {
   UserCheck, MapPin, ArrowLeft, Loader2, Palette
 } from 'lucide-react';
 
+// Use environment variable for the API base URL to ensure production compatibility
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function ViewProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -36,7 +39,7 @@ export default function ViewProfile() {
       setIsLoading(true);
       try {
         const token = localStorage.getItem('collab_token');
-        const response = await fetch(`http://localhost:5000/api/users/${id}`, {
+        const response = await fetch(`${API_BASE_URL}/api/users/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         
@@ -67,7 +70,7 @@ export default function ViewProfile() {
     setIsUpdating(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/users/${id}/follow`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${id}/follow`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -93,7 +96,7 @@ export default function ViewProfile() {
   const handleRateUser = async (ratingValue) => {
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/users/${id}/rate`, {
+      const response = await fetch(`${API_BASE_URL}/api/users/${id}/rate`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -117,7 +120,11 @@ export default function ViewProfile() {
   };
 
   if (isLoading) {
-    return <div className="h-full w-full flex items-center justify-center"><Loader2 className="animate-spin text-[#FF2D88] w-8 h-8" /></div>;
+    return (
+      <div className="h-full w-full flex items-center justify-center">
+        <Loader2 className="animate-spin text-[#FF2D88] w-8 h-8" />
+      </div>
+    );
   }
 
   if (error || !viewedUser) {
@@ -152,7 +159,15 @@ export default function ViewProfile() {
             <Palette size={16} className="text-gray-300" />
             <div className="flex gap-2">
               {Object.keys(themes).map((themeKey) => (
-                <button key={themeKey} onClick={() => setActiveTheme(themeKey)} className={`w-4 h-4 rounded-full transition-transform hover:scale-125 ${activeTheme === themeKey ? 'ring-2 ring-white scale-110' : 'opacity-50'}`} style={{ background: themeKey === 'galaxy' ? '#FF2D88' : themeKey === 'ocean' ? '#00D2FF' : themeKey === 'sunset' ? '#FF416C' : '#00FFD1' }} />
+                <button 
+                  key={themeKey} 
+                  onClick={() => setActiveTheme(themeKey)} 
+                  className={`w-4 h-4 rounded-full transition-transform hover:scale-125 ${activeTheme === themeKey ? 'ring-2 ring-white scale-110' : 'opacity-50'}`} 
+                  style={{ 
+                    background: themeKey === 'galaxy' ? '#FF2D88' : themeKey === 'ocean' ? '#00D2FF' : themeKey === 'sunset' ? '#FF416C' : '#00FFD1' 
+                  }} 
+                  aria-label={`Switch to ${themeKey} theme`}
+                />
               ))}
             </div>
           </div>

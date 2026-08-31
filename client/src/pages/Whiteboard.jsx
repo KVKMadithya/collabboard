@@ -24,7 +24,7 @@ const loadScript = (src) => {
 
 export default function Whiteboard() {
   const { activeProject, user } = useProject(); 
-  
+
   // --- REFS ---
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -32,6 +32,7 @@ export default function Whiteboard() {
   const socketRef = useRef(null);
   const cameraRef = useRef(null);
   const handsRef = useRef(null);
+  const gesturePointerRef = useRef(null); // Direct DOM manipulation for zero-lag cursor
 
   // --- STATE ---
   const [isDrawing, setIsDrawing] = useState(false);
@@ -40,23 +41,29 @@ export default function Whiteboard() {
   const [isEraser, setIsEraser] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   
-  // Zoom State
+  // Zoom & Scale
   const [scale, setScale] = useState(1);
 
-  // Gesture Tracking State
+  // Gesture State
   const [isGestureMode, setIsGestureMode] = useState(false);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState(null);
-  const [gestureCursor, setGestureCursor] = useState({ x: 0, y: 0, isPinching: false, visible: false });
   
   // Multiplayer Live State
   const [liveCursors, setLiveCursors] = useState({});
   const [activeUsers, setActiveUsers] = useState([]);
   
-  // High-Precision Tracking
+  // High-Precision Tracking Contexts
   const lastPos = useRef({ x: 0, y: 0 });
   const isPinchingRef = useRef(false);
   const smoothedPos = useRef({ x: 0, y: 0 });
+
+  // --- DRAWING STATE REF --- 
+  // (Prevents camera from restarting when changing colors/tools)
+  const drawStateRef = useRef({ color, brushSize, isEraser, scale });
+  useEffect(() => {
+    drawStateRef.current = { color, brushSize, isEraser, scale };
+  }, [color, brushSize, isEraser, scale]);
 
   // --- 1. SOCKET CONNECTION & MULTIPLAYER PRESENCE ---
   useEffect(() => {
@@ -138,20 +145,20 @@ export default function Whiteboard() {
       projectId: activeProject._id,
       userId: user._id,
       name: user.firstName,
-      color: color,
+      color: drawStateRef.current.color,
       x, y
     });
   };
 
   // --- 4. ACCURATE SCALED COORDINATE MAPPING ---
-  const getCanvasCoords = useCallback((screenX, screenY) => {
+  const getCanvasCoords = useCallback((screenX, screenY, currentScale = scale) => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     
     return {
-      x: (screenX - rect.left) / scale,
-      y: (screenY - rect.top) / scale
+      x: (screenX - rect.left) / currentScale,
+      y: (screenY - rect.top) / currentScale
     };
   }, [scale]);
 
@@ -196,22 +203,20 @@ export default function Whiteboard() {
 
   const fitToScreen = useCallback(() => {
     if (!containerRef.current) return;
-    // Uses the actual window size to calculate the perfect fit
     const { clientWidth, clientHeight } = containerRef.current;
     const newScale = Math.min((clientWidth - 80) / 2400, (clientHeight - 180) / 1600);
     setScale(Math.max(0.10, newScale));
   }, []);
 
-  // Recalculates perfectly when you expand/collapse
   useEffect(() => {
     const timer = setTimeout(fitToScreen, 150);
     return () => clearTimeout(timer);
   }, [isExpanded, fitToScreen]);
 
-  // --- 6. ADVANCED GESTURE TRACKING (SMOOTH PEN ENGINE) ---
+  // --- 6. ADVANCED GESTURE TRACKING (WRITING & SMOOTHING ENGINE) ---
   useEffect(() => {
     if (!isGestureMode) {
-      setGestureCursor((prev) => ({ ...prev, visible: false }));
+      if (gesturePointerRef.current) gesturePointerRef.current.style.opacity = '0';
       return;
     }
 
@@ -235,12 +240,16 @@ export default function Whiteboard() {
         });
 
         handsRef.current.setOptions({
-          maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.8, minTrackingConfidence: 0.9
+          maxNumHands: 1, 
+          modelComplexity: 1, 
+          minDetectionConfidence: 0.8, 
+          minTrackingConfidence: 0.9
         });
 
         handsRef.current.onResults((results) => {
           if (!canvasRef.current || !containerRef.current || !isMounted) return;
           const container = containerRef.current;
+          const { color: curColor, brushSize: curSize, isEraser: curEraser, scale: curScale } = drawStateRef.current;
           
           if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
             const landmarks = results.multiHandLandmarks[0];
@@ -250,49 +259,84 @@ export default function Whiteboard() {
             const middleMCP = landmarks[9];
 
             const containerRect = container.getBoundingClientRect();
+            // Map camera coordinates smoothly to the visible container 
             const screenX = containerRect.left + (1 - indexTip.x) * containerRect.width;
             const screenY = containerRect.top + indexTip.y * containerRect.height;
 
-            const rawCanvasCoords = getCanvasCoords(screenX, screenY);
+            const rawCanvasCoords = getCanvasCoords(screenX, screenY, curScale);
             const targetX = rawCanvasCoords.x;
             const targetY = rawCanvasCoords.y;
 
-            const smoothFactor = 0.85;
-            smoothedPos.current.x = smoothedPos.current.x === 0 ? targetX : smoothedPos.current.x * smoothFactor + targetX * (1 - smoothFactor);
-            smoothedPos.current.y = smoothedPos.current.y === 0 ? targetY : smoothedPos.current.y * smoothFactor + targetY * (1 - smoothFactor);
+            // 🚀 Dynamic Velocity Smoothing (The secret to writing)
+            // Fast moves get less smoothing to catch up. Slow moves get high smoothing to stop jitter.
+            const dx = targetX - smoothedPos.current.x;
+            const dy = targetY - smoothedPos.current.y;
+            const distance = Math.hypot(dx, dy);
+            
+            let alpha = 0.45; 
+            if (distance > 40) alpha = 0.8; // Quick snap for fast strokes
+            else if (distance < 5) alpha = 0.2; // Heavy stabilization for drawing fine details
+
+            smoothedPos.current.x = smoothedPos.current.x === 0 ? targetX : smoothedPos.current.x + dx * alpha;
+            smoothedPos.current.y = smoothedPos.current.y === 0 ? targetY : smoothedPos.current.y + dy * alpha;
 
             const currentX = smoothedPos.current.x;
             const currentY = smoothedPos.current.y;
 
-            const handScale = Math.hypot(middleMCP.x - wrist.x, middleMCP.y - wrist.y) || 0.3;
-            const pinchDistance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
+            // 🚀 Enhanced Pinch Detection (Incorporates Z depth for accuracy)
+            const handScale = Math.hypot(middleMCP.x - wrist.x, middleMCP.y - wrist.y);
+            const pinchDistance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y, (indexTip.z - thumbTip.z) * 1.5);
             const pinchRatio = pinchDistance / handScale;
 
-            if (!isPinchingRef.current && pinchRatio < 0.12) {
+            // Stricter Hysteresis (Prevents accidental pen lifts while writing)
+            if (!isPinchingRef.current && pinchRatio < 0.15) {
               isPinchingRef.current = true;
               lastPos.current = { x: currentX, y: currentY };
-            } else if (isPinchingRef.current && pinchRatio > 0.22) {
+            } else if (isPinchingRef.current && pinchRatio > 0.25) {
               isPinchingRef.current = false;
             }
 
             const isPinchActive = isPinchingRef.current;
-
-            setGestureCursor({ x: currentX, y: currentY, isPinching: isPinchActive, visible: true });
             broadcastCursor(currentX, currentY);
 
             if (isPinchActive) {
-              drawOnCanvas(lastPos.current.x, lastPos.current.y, currentX, currentY, color, brushSize, isEraser, true);
+              drawOnCanvas(lastPos.current.x, lastPos.current.y, currentX, currentY, curColor, curSize, curEraser, true);
               lastPos.current = { x: currentX, y: currentY };
             }
+
+            // 🚀 Zero-Lag DOM Cursor Update
+            if (gesturePointerRef.current) {
+              const ptr = gesturePointerRef.current;
+              ptr.style.opacity = '1';
+              ptr.style.left = `${currentX * curScale}px`;
+              ptr.style.top = `${currentY * curScale}px`;
+              ptr.style.transform = 'translate(-50%, -50%)';
+              
+              const pointerSize = isPinchActive ? (curEraser ? curSize * 4 : curSize) * curScale : 18;
+              ptr.style.width = `${pointerSize}px`;
+              ptr.style.height = `${pointerSize}px`;
+              
+              if (isPinchActive) {
+                ptr.style.backgroundColor = curEraser ? '#FFFFFF' : curColor;
+                ptr.style.border = curEraser ? '1px solid #E5E7EB' : 'none';
+                ptr.style.boxShadow = 'none';
+              } else {
+                ptr.style.backgroundColor = 'transparent';
+                ptr.style.border = `2px solid ${curColor}`;
+                ptr.style.boxShadow = `0 0 10px ${curColor}`;
+              }
+            }
           } else {
-            setGestureCursor((prev) => ({ ...prev, visible: false }));
+            if (gesturePointerRef.current) gesturePointerRef.current.style.opacity = '0';
           }
         });
 
         if (videoRef.current) {
           cameraRef.current = new CameraClass(videoRef.current, {
             onFrame: async () => {
-              if (videoRef.current && handsRef.current && isMounted) await handsRef.current.send({ image: videoRef.current });
+              if (videoRef.current && handsRef.current && isMounted) {
+                await handsRef.current.send({ image: videoRef.current });
+              }
             },
             width: 640, height: 480
           });
@@ -313,12 +357,11 @@ export default function Whiteboard() {
       if (handsRef.current) { try { handsRef.current.close(); } catch (e) {} handsRef.current = null; }
       setIsCameraReady(false);
     };
-  }, [isGestureMode, color, brushSize, isEraser, scale, getCanvasCoords]);
+  }, [isGestureMode, getCanvasCoords]); // Only re-run if gesture mode toggles (not on color changes!)
 
   if (!activeProject) return null;
 
   return (
-    // 🚀 TRUE FULLSCREEN BREAKOUT: Uses `fixed inset-0 w-screen h-screen z-[99999]` to blanket the entire monitor
     <div className={`transition-all duration-300 ${
       isExpanded 
         ? 'fixed top-0 left-0 w-screen h-screen z-[99999] bg-[#0A0D14] flex flex-col m-0 p-0 overflow-hidden animate-fade-in' 
@@ -327,9 +370,7 @@ export default function Whiteboard() {
       
       {/* 🚀 SMART HEADER BAR */}
       {isExpanded ? (
-        // EXPANDED HEADER: Floats absolutely over the canvas like Figma/Miro
         <div className="absolute top-6 left-6 right-6 flex items-start justify-between z-[200] pointer-events-none">
-          
           <div className="pointer-events-auto flex items-center gap-2 bg-theme-panel/90 backdrop-blur-xl border border-theme-border px-4 py-2 rounded-full shadow-2xl">
             <Users size={16} className="text-[#00FF66]" />
             <span className="text-sm font-bold text-theme-text">{activeUsers.length + 1} Online</span>
@@ -352,10 +393,8 @@ export default function Whiteboard() {
               <button onClick={() => setIsGestureMode(true)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${isGestureMode ? 'bg-[#3B82F6] text-white shadow-sm' : 'text-theme-muted hover:text-theme-text'}`}><Hand size={16} /> Gesture AI</button>
             </div>
           </div>
-
         </div>
       ) : (
-        // COLLAPSED HEADER: Standard dashboard flow
         <div className="flex items-end justify-between flex-shrink-0">
           <div>
             <h1 className="text-3xl font-bold text-theme-text tracking-tight flex items-center gap-3">
@@ -394,7 +433,7 @@ export default function Whiteboard() {
       {/* 🚀 RESPONSIVE SCROLLABLE CANVAS WRAPPER */}
       <div className={`flex-1 relative flex flex-col overflow-hidden ${!isExpanded ? 'bg-[#0A0D14] border border-theme-border rounded-2xl shadow-inner' : 'bg-transparent'}`}>
         
-        {/* STATIONARY WEBCAM OVERLAY (Pinned inside wrapper, ignores scrolling) */}
+        {/* STATIONARY WEBCAM OVERLAY */}
         {isGestureMode && (
           <div className={`absolute right-6 w-48 h-36 bg-black rounded-xl overflow-hidden border-2 border-[#3B82F6] shadow-2xl z-[200] flex flex-col pointer-events-none ${isExpanded ? 'top-24' : 'top-4'}`}>
             {!isCameraReady && !cameraError && (
@@ -415,13 +454,11 @@ export default function Whiteboard() {
           </div>
         )}
 
-        {/* Scrollable Area */}
         <div 
           ref={containerRef}
           onWheel={handleWheel}
           className="flex-1 w-full h-full overflow-auto custom-scrollbar"
         >
-          {/* Centering Wrapper: Keeps canvas in middle of the screen when zoomed out */}
           <div className="min-w-full min-h-full flex items-center justify-center p-10">
             <div 
               style={{ width: `${2400 * scale}px`, height: `${1600 * scale}px` }}
@@ -432,24 +469,15 @@ export default function Whiteboard() {
                 width={2400} height={1600}
                 style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
                 onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseOut={handleMouseUp}
-                className="absolute top-0 left-0 w-[2400px] h-[1600px] block touch-none cursor-crosshair"
+                className={`absolute top-0 left-0 w-[2400px] h-[1600px] block touch-none ${isGestureMode ? 'cursor-none' : 'cursor-crosshair'}`}
               />
 
-              {/* DYNAMIC GESTURE BRUSH POINTER */}
-              {isGestureMode && gestureCursor.visible && (
-                <div 
-                  style={{
-                    left: `${gestureCursor.x * scale}px`, top: `${gestureCursor.y * scale}px`, transform: 'translate(-50%, -50%)',
-                    width: gestureCursor.isPinching ? `${(isEraser ? brushSize * 4 : brushSize) * scale}px` : '18px',
-                    height: gestureCursor.isPinching ? `${(isEraser ? brushSize * 4 : brushSize) * scale}px` : '18px',
-                    backgroundColor: gestureCursor.isPinching ? (isEraser ? '#FFFFFF' : color) : 'transparent',
-                    border: gestureCursor.isPinching ? (isEraser ? '1px solid #E5E7EB' : 'none') : `2px solid ${color}`,
-                    boxShadow: gestureCursor.isPinching ? 'none' : `0 0 10px ${color}`,
-                    transition: 'width 0.1s, height 0.1s, background-color 0.1s' 
-                  }}
-                  className="absolute rounded-full pointer-events-none z-40 ease-out"
-                />
-              )}
+              {/* 🚀 HIGH-PERFORMANCE DOM GESTURE POINTER (ZERO RE-RENDERS) */}
+              <div 
+                ref={gesturePointerRef}
+                className="absolute rounded-full pointer-events-none z-40 ease-out transition-all duration-75"
+                style={{ opacity: 0 }}
+              />
 
               {/* LIVE MULTIPLAYER CURSORS */}
               {Object.values(liveCursors).map(cur => {
@@ -473,7 +501,6 @@ export default function Whiteboard() {
         {/* 🚀 SLEEK, WIDE, ANCHORED BOTTOM TOOLBAR */}
         <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-theme-panel/95 backdrop-blur-xl border border-theme-border px-6 py-2.5 rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.5)] flex items-center gap-6 z-[200] w-max select-none">
           
-          {/* Colors */}
           <div className="flex items-center gap-2 pr-6 border-r border-theme-border">
             <Palette size={16} className="text-theme-muted mr-1" />
             {['#FF2D88', '#3B82F6', '#14B8A6', '#F59E0B', '#111827'].map(c => (
@@ -483,7 +510,6 @@ export default function Whiteboard() {
             <input type="color" value={color} onChange={(e) => { setColor(e.target.value); setIsEraser(false); }} className="w-6 h-6 rounded-full cursor-pointer border-0 p-0 overflow-hidden ml-1" />
           </div>
 
-          {/* Tools */}
           <div className="flex items-center gap-2 pr-6 border-r border-theme-border">
             <button onClick={() => setIsEraser(false)} className={`p-2 rounded-lg transition-all ${!isEraser ? 'bg-theme-bg text-theme-text shadow-sm' : 'text-theme-muted hover:bg-black/5 dark:hover:bg-white/5'}`} title="Pen Tool">
               <Pencil size={18} />
@@ -493,14 +519,12 @@ export default function Whiteboard() {
             </button>
           </div>
 
-          {/* Brush Size */}
           <div className="flex items-center gap-3 pr-6 border-r border-theme-border w-[140px]">
             <span className="w-1.5 h-1.5 rounded-full bg-theme-muted"></span>
             <input type="range" min="2" max="30" value={brushSize} onChange={(e) => setBrushSize(parseInt(e.target.value))} className="flex-1 accent-theme-accent cursor-pointer" />
             <span className="w-3 h-3 rounded-full bg-theme-muted"></span>
           </div>
 
-          {/* Zoom & Fit Controls */}
           <div className="flex items-center gap-1 pr-6 border-r border-theme-border">
             <button onClick={() => handleZoom(-0.10)} className="p-1.5 rounded-lg text-theme-muted hover:text-theme-text hover:bg-black/5" title="Zoom Out"><ZoomOut size={16} /></button>
             <span className="text-xs font-mono font-bold w-12 text-center text-theme-text">{Math.round(scale * 100)}%</span>
@@ -509,11 +533,9 @@ export default function Whiteboard() {
             <button onClick={resetZoom} className="p-1.5 rounded-lg text-theme-muted hover:text-theme-text hover:bg-black/5" title="Reset to 100%"><RotateCcw size={14} /></button>
           </div>
 
-          {/* Clear Board */}
           <button onClick={handleClearBoard} className="flex items-center gap-2 p-2 px-3 rounded-lg text-red-500 hover:bg-red-500/10 transition-colors font-bold text-sm">
             <Trash2 size={16} /> Clear
           </button>
-
         </div>
       </div>
     </div>

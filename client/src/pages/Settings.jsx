@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Lock, Mail, Palette, Bot, Globe, Shield, Check, Save, AlertCircle 
+  Lock, Mail, Palette, Bot, Globe, Shield, Check, Save, AlertCircle, Loader2 
 } from 'lucide-react';
+import { apiFetch } from '../utils/api'; // 👈 Centralized API utility
 
 const LANGUAGES = [
   { code: 'en', label: 'English (US)' },
@@ -61,33 +62,33 @@ export default function Settings() {
 
   // Track initial mount to prevent the translation glitch
   const isInitialMount = useRef(true);
-  const originalLanguage = savedPrefs.language || 'en';
 
   // --- INITIAL LOAD: FETCH DATA ---
   useEffect(() => {
     const fetchSettings = async () => {
-      const token = localStorage.getItem('collab_token');
       const storedUser = localStorage.getItem('userInfo');
-      
+
       if (storedUser) {
-        setEmailData(prev => ({ ...prev, currentEmail: JSON.parse(storedUser).email || '' }));
+        try {
+          setEmailData(prev => ({ ...prev, currentEmail: JSON.parse(storedUser).email || '' }));
+        } catch (e) {
+          console.error("Error parsing stored user info", e);
+        }
       }
 
+      const token = localStorage.getItem('collab_token');
       if (!token) return;
 
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await response.json();
-        
+        const data = await apiFetch('/api/auth/me');
+
         if (data.preferences) {
           // Fully sync local state with the database
           setAppearance(prev => ({ ...prev, accentColor: data.preferences.accentColor || prev.accentColor }));
           setAiConfig(prev => ({ ...prev, responseStyle: data.preferences.responseStyle || prev.responseStyle, customGreeting: data.preferences.customGreeting || prev.customGreeting }));
           setRegional(prev => ({ ...prev, language: data.preferences.language || prev.language, timezone: data.preferences.timezone || prev.timezone }));
           setSecurity(prev => ({ ...prev, defaultShareRole: data.preferences.defaultShareRole || prev.defaultShareRole, twoFactorEnabled: data.preferences.twoFactorEnabled ?? prev.twoFactorEnabled }));
-          
+
           // Keep local storage up to date with the DB
           localStorage.setItem('collab_preferences', JSON.stringify(data.preferences));
         }
@@ -105,7 +106,6 @@ export default function Settings() {
 
   // --- LIVE TRANSLATION PREVIEW (Glitch Fixed) ---
   useEffect(() => {
-    // 🛑 Prevent Google from firing a double-translation on page load
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
@@ -127,7 +127,6 @@ export default function Settings() {
     e.preventDefault();
     setStatusMessage({ type: '', text: '' });
     setIsSaving(true);
-    const token = localStorage.getItem('collab_token');
 
     try {
       // 1. Secure Email Update
@@ -135,14 +134,11 @@ export default function Settings() {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(emailData.newEmail)) throw new Error("Please enter a valid email address.");
 
-        const emailRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/email`, {
+        await apiFetch('/api/users/email', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ newEmail: emailData.newEmail })
         });
-        const emailJson = await emailRes.json();
-        if (!emailRes.ok) throw new Error(emailJson.message || "Failed to update email.");
-        
+
         setEmailData(prev => ({ ...prev, currentEmail: emailData.newEmail, newEmail: '' }));
         const storedUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
         localStorage.setItem('userInfo', JSON.stringify({ ...storedUser, email: emailData.newEmail }));
@@ -153,18 +149,15 @@ export default function Settings() {
         if (!passwordData.currentPassword) throw new Error("Current password is required to set a new one.");
         if (passwordData.newPassword.length < 6) throw new Error("New password must be at least 6 characters.");
         if (passwordData.newPassword !== passwordData.confirmPassword) throw new Error("New passwords do not match.");
-        
-        const passRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/password`, {
+
+        await apiFetch('/api/users/password', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ 
             currentPassword: passwordData.currentPassword, 
             newPassword: passwordData.newPassword 
           })
         });
-        const passJson = await passRes.json();
-        if (!passRes.ok) throw new Error(passJson.message || "Failed to update password. Check your current password.");
-        
+
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
       }
 
@@ -180,14 +173,11 @@ export default function Settings() {
         twoFactorEnabled: security.twoFactorEnabled
       };
 
-      const prefRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/settings`, {
+      await apiFetch('/api/users/settings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ preferences: preferencesPayload })
       });
-      
-      if (!prefRes.ok) throw new Error("Failed to save application preferences.");
-      
+
       localStorage.setItem('collab_preferences', JSON.stringify(preferencesPayload));
 
       // 4. Lock in Translation Cookies Globally
@@ -221,7 +211,7 @@ export default function Settings() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-80px)] bg-theme-bg text-theme-text p-6 overflow-hidden transition-colors duration-300">
-      
+
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-theme-border flex-shrink-0 mb-6">
         <div>
@@ -245,7 +235,7 @@ export default function Settings() {
 
       {/* Main Settings Container */}
       <div className="flex flex-col md:flex-row flex-1 gap-6 min-h-0 overflow-hidden">
-        
+
         {/* Navigation Sidebar Tabs */}
         <div className="w-full md:w-64 flex flex-row md:flex-col gap-1.5 overflow-x-auto md:overflow-y-auto flex-shrink-0">
           {tabs.map((tab) => {
@@ -273,7 +263,7 @@ export default function Settings() {
         {/* Content Area */}
         <div className="flex-1 bg-theme-panel border border-theme-border rounded-2xl p-6 overflow-y-auto min-h-0 premium-scrollbar">
           <form onSubmit={handleSave} className="space-y-6 max-w-2xl">
-            
+
             {/* 1. EMAIL & PASSWORD */}
             {activeTab === 'account' && (
               <div className="space-y-8 animate-in fade-in duration-300">
@@ -499,7 +489,7 @@ export default function Settings() {
                 style={{ backgroundColor: 'var(--theme-accent)' }}
                 className="text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all flex items-center gap-2 hover:opacity-90 active:scale-95 shadow-lg disabled:opacity-50"
               >
-                <Save size={16} />
+                {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                 <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
               </button>
             </div>
