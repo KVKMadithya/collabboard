@@ -3,9 +3,10 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, StickyNote, CheckSquare, Calendar, 
   TrendingUp, Users, GitBranch, Bot, FileText, Settings,
-  Share2, Star, CheckCircle2, Search, Pin
+  Share2, Star, CheckCircle2, Search, Pin,PenTool
 } from 'lucide-react';
 import ShareModal from './ShareModal';
+
 
 export default function Sidebar() {
   const [isHovered, setIsHovered] = useState(false);
@@ -25,6 +26,7 @@ export default function Sidebar() {
     { name: 'Notes', icon: <StickyNote size={20} />, path: '/notes' },
     { name: 'Tasks', icon: <CheckSquare size={20} />, path: '/board' },
     { name: 'Calendar', icon: <Calendar size={20} />, path: '/calendar' },
+    { name: 'Whiteboard', icon: <PenTool size={20} />, path: '/whiteboard' },
     { name: 'Progression', icon: <TrendingUp size={20} />, path: '/progression' },
     { name: 'Members', icon: <Users size={20} />, path: '/members' },
     { name: 'Git Feed', icon: <GitBranch size={20} />, path: '/git' }, 

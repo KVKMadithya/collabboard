@@ -16,7 +16,8 @@ import GitFeed from './pages/GitFeed';
 import SearchList from './pages/SearchList';
 import Settings from './pages/Settings';
 import ProgressionMap from './pages/ProgressionMap';
-import Starred from './pages/Starred'; // 👈 NEW: Imported the Starred dashboard
+import Starred from './pages/Starred';
+import Whiteboard from './pages/Whiteboard'; // 👈 NEW: Imported the Real-Time Whiteboard component
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -187,9 +188,10 @@ function App() {
               <Route path="/search" element={<SearchList />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/progression" element={<ProgressionMap />} />
-              
-              {/* 🛑 NEW ROUTE: Starred items dashboard */}
               <Route path="/starred" element={<Starred />} />
+              
+              {/* 🛑 NEW ROUTE: Real-Time Whiteboard & Gesture AI */}
+              <Route path="/whiteboard" element={<Whiteboard />} />
             </Route>
 
           </Routes>

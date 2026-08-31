@@ -2,19 +2,21 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-const path = require('path'); // 👈 Added the path module for directory routing
+const path = require('path');
+const http = require('http'); 
+const { Server } = require('socket.io'); 
 
 const app = express();
-app.use(cors());
 
-// Increase the payload limit to 10 megabytes to allow for high-res profile pictures
-app.use(express.json({ limit: '10mb' }));
+// Standard middleware
+app.use(cors());
+app.use(express.json({ limit: '10mb' })); // High-res payload limit
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// 👈 ADDED THIS: Makes the 'uploads' folder publicly accessible via URL for your frontend attachments
+// Serve static uploads folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Mount standard routes
+// Mount all standard API routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
@@ -24,20 +26,68 @@ app.use('/api/members', require('./routes/memberRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/github', require('./routes/githubRoutes'));
 app.use('/api/search', require('./routes/searchRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 
-// Import and mount the AI routes
-const aiRoutes = require('./routes/aiRoutes');
-app.use('/api/ai', aiRoutes);
+// ==========================================
+// ⚡ WEBSOCKET ENGINE (REAL-TIME WHITEBOARD)
+// ==========================================
 
-// Connect to MongoDB
+// 1. Wrap Express in a native Node HTTP Server
+const server = http.createServer(app);
+
+// 2. Initialize Socket.io with CORS rules
+const io = new Server(server, {
+  cors: {
+    origin: "*", // Accepts connections from any frontend URL
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+// 3. Define Real-Time Events
+io.on('connection', (socket) => {
+  console.log(`🔌 Client connected via WebSockets: ${socket.id}`);
+
+  // Room Subscription: Isolate drawings to a specific workspace
+  socket.on('join-board', (data) => {
+    // Supports both the new object format (with user identity) and the old string format
+    const projectId = typeof data === 'object' ? data.projectId : data;
+    socket.join(projectId);
+    console.log(`👤 User ${socket.id} joined whiteboard room: ${projectId}`);
+  });
+
+  // Relay drawing coordinates to everyone else in the workspace
+  socket.on('draw-line', ({ projectId, drawingData }) => {
+    socket.to(projectId).emit('draw-line', drawingData);
+  });
+
+  // Relay live cursor movements (Google Docs style)
+  socket.on('cursor-move', (data) => {
+    socket.to(data.projectId).emit('cursor-move', data);
+  });
+
+  // Relay board wipe commands
+  socket.on('clear-board', (projectId) => {
+    socket.to(projectId).emit('clear-board');
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`🛑 Client disconnected: ${socket.id}`);
+  });
+});
+
+// ==========================================
+// 🗄️ DATABASE & SERVER IGNITION
+// ==========================================
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Successfully connected to CollabBoard MongoDB'))
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
+    process.exit(1); // Kill the server if the database fails to connect
   });
 
+// 🛑 CRITICAL: We must boot 'server', not 'app', to start both Express and WebSockets
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`🚀 Server & WebSockets running on port ${PORT}`);
 });
