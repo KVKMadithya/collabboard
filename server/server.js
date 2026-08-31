@@ -8,8 +8,14 @@ const { Server } = require('socket.io');
 
 const app = express();
 
-// Standard middleware
-app.use(cors());
+// Standard middleware with explicit CORS support for production frontend
+app.use(cors({
+  origin: [
+    'http://localhost:5173',
+    'https://collabboard-nu.vercel.app'
+  ],
+  credentials: true
+}));
 app.use(express.json({ limit: '10mb' })); // High-res payload limit
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -35,11 +41,15 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 // 1. Wrap Express in a native Node HTTP Server
 const server = http.createServer(app);
 
-// 2. Initialize Socket.io with CORS rules
+// 2. Initialize Socket.io with matching CORS rules
 const io = new Server(server, {
   cors: {
-    origin: "*", // Accepts connections from any frontend URL
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    origin: [
+      'http://localhost:5173',
+      'https://collabboard-nu.vercel.app'
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   }
 });
 
@@ -49,7 +59,6 @@ io.on('connection', (socket) => {
 
   // Room Subscription: Isolate drawings to a specific workspace
   socket.on('join-board', (data) => {
-    // Supports both the new object format (with user identity) and the old string format
     const projectId = typeof data === 'object' ? data.projectId : data;
     socket.join(projectId);
     console.log(`👤 User ${socket.id} joined whiteboard room: ${projectId}`);
@@ -83,10 +92,9 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Successfully connected to CollabBoard MongoDB'))
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err);
-    process.exit(1); // Kill the server if the database fails to connect
+    process.exit(1);
   });
 
-// 🛑 CRITICAL: We must boot 'server', not 'app', to start both Express and WebSockets
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server & WebSockets running on port ${PORT}`);

@@ -8,20 +8,18 @@ export default function Auth({ onLoginSuccess }) {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
-  // 👇 Updated state to include the new registration fields
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     password: '',
-    role: 'Software Engineering', // Default dropdown value
+    role: 'Software Engineering',
     university: ''
   });
 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- UI/UX: Rotating Text State ---
   const texts = [
     "Supercharge your team's productivity with real-time task management.",
     "Streamline workflows and conquer your hackathon milestones.",
@@ -30,9 +28,10 @@ export default function Auth({ onLoginSuccess }) {
   ];
   const [textIndex, setTextIndex] = useState(0);
   const [fade, setFade] = useState(true);
-
-  // --- UI/UX: Liquid Mouse Tracking State ---
   const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
+
+  // 🛑 NEW: Centralized dynamic API URL
+  const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:5000';
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -75,7 +74,8 @@ export default function Auth({ onLoginSuccess }) {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     
     try {
-      const response = await fetch(`http://127.0.0.1:5000${endpoint}`, {
+      // 👇 Updated to use API_URL
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -95,8 +95,9 @@ export default function Auth({ onLoginSuccess }) {
       }
     } catch (err) {
       console.error("Auth Error:", err);
+      // 👇 Removed hardcoded IP from error message
       setError(err.message === 'Failed to fetch' 
-        ? 'Cannot connect to the server at 127.0.0.1:5000. Is the backend running?' 
+        ? 'Cannot connect to the server. Is the backend running?' 
         : err.message);
     } finally {
       setIsLoading(false);
@@ -108,7 +109,8 @@ export default function Auth({ onLoginSuccess }) {
       setIsLoading(true);
       setError('');
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/google`, {
+        // 👇 Updated to use API_URL
+        const res = await fetch(`${API_URL}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: tokenResponse.access_token }),
@@ -128,8 +130,9 @@ export default function Auth({ onLoginSuccess }) {
         }
       } catch (err) {
         console.error("Google Auth Error:", err);
+        // 👇 Removed hardcoded IP from error message
         setError(err.message === 'Failed to fetch' 
-          ? 'Cannot connect to the server at 127.0.0.1:5000. Is the backend running?' 
+          ? 'Cannot connect to the server. Is the backend running?' 
           : err.message);
       } finally {
         setIsLoading(false);
@@ -223,7 +226,6 @@ export default function Auth({ onLoginSuccess }) {
                   </div>
                 </div>
 
-                {/* 👇 NEW: Specialization and University Row */}
                 <div className="flex gap-4">
                   <div className="space-y-1.5 flex-1">
                     <label className="text-sm font-medium text-gray-300">Specialization</label>
