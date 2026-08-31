@@ -38,23 +38,34 @@ export default function ProgressionMap() {
       setIsLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem('collab_token');
+        const token = localStorage.getItem('collab_token') || localStorage.getItem('token');
         const headers = { Authorization: `Bearer ${token}` };
 
+        // Helper to attempt relative endpoint first, then fallback to localhost:5000
+        const request = async (endpoint) => {
+          try {
+            const res = await fetch(endpoint, { headers });
+            if (res.ok) return res;
+          } catch (e) {
+            // Fallback for standalone backend server
+          }
+          return fetch(`http://localhost:5000${endpoint}`, { headers });
+        };
+
         const [membersRes, tasksRes] = await Promise.all([
-          fetch(`http://localhost:5000/api/members?projectId=${activeProject._id}`, { headers }),
-          fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, { headers })
+          request(`/api/members?projectId=${activeProject._id}`),
+          request(`/api/tasks?projectId=${activeProject._id}`)
         ]);
 
-        if (!membersRes.ok || !tasksRes.ok) throw new Error("Failed to fetch progression data");
+        if (!membersRes.ok || !tasksRes.ok) throw new Error("Failed to fetch progression data from server");
 
         const membersData = await membersRes.json();
         const tasksData = await tasksRes.json();
 
-        setMembers(membersData || []);
-        setTasks(tasksData || []);
+        setMembers(Array.isArray(membersData) ? membersData : []);
+        setTasks(Array.isArray(tasksData) ? tasksData : []);
       } catch (err) {
-        setError(err.message);
+        setError(err.message || "Failed to connect to backend engine");
       } finally {
         setIsLoading(false);
       }
@@ -86,14 +97,11 @@ export default function ProgressionMap() {
     if (!el) return;
 
     const handleWheel = (e) => {
-      e.preventDefault(); // Kills native scroll
+      e.preventDefault();
       const zoomSensitivity = 0.002;
       const delta = -e.deltaY * zoomSensitivity;
       
-      setZoom(prev => {
-        const newZoom = Math.min(Math.max(0.3, prev + delta), 2.5); // Clamp zoom between 30% and 250%
-        return newZoom;
-      });
+      setZoom(prev => Math.min(Math.max(0.3, prev + delta), 2.5));
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
@@ -102,7 +110,6 @@ export default function ProgressionMap() {
 
   // --- 4. PANNING (CLICK & DRAG) LOGIC ---
   const handlePointerDown = (e) => {
-    // If they are clicking a node/button, don't trigger canvas panning
     if (e.target.closest('.no-pan')) return;
     setIsDraggingMap(true);
     e.target.setPointerCapture(e.pointerId);
@@ -118,7 +125,7 @@ export default function ProgressionMap() {
 
   const handlePointerUp = (e) => {
     setIsDraggingMap(false);
-    e.target.releasePointerCapture(e.pointerId);
+    try { e.target.releasePointerCapture(e.pointerId); } catch (_) {}
   };
 
   // --- 5. THE SPIDER WEB COORDINATE ENGINE ---
@@ -126,6 +133,9 @@ export default function ProgressionMap() {
   const taskCoords = {};
   const unassignedTasks = [];
   const assignedTasks = [];
+
+  // Helper function to safely extract member ID
+  const getAssigneeId = (assignee) => typeof assignee === 'object' && assignee !== null ? assignee._id : assignee;
 
   tasks.forEach(t => {
     if (!t.assignees || t.assignees.length === 0) unassignedTasks.push(t);
@@ -148,9 +158,10 @@ export default function ProgressionMap() {
   // Calculate Member Progress Percentages
   assignedTasks.forEach(t => {
     t.assignees.forEach(a => {
-      if (memberCoords[a._id]) {
-        memberCoords[a._id].totalAssigned += 1;
-        if (t.status === 'done') memberCoords[a._id].totalDone += 1;
+      const aId = getAssigneeId(a);
+      if (memberCoords[aId]) {
+        memberCoords[aId].totalAssigned += 1;
+        if (t.status === 'done') memberCoords[aId].totalDone += 1;
       }
     });
   });
@@ -171,21 +182,21 @@ export default function ProgressionMap() {
   
   assignedTasks.forEach(t => {
     if (t.assignees.length === 1) {
-      const mId = t.assignees[0]._id;
+      const mId = getAssigneeId(t.assignees[0]);
       if (tasksByMember[mId]) tasksByMember[mId].push(t);
     }
   });
 
   assignedTasks.forEach((t, i) => {
     if (t.assignees.length === 1) {
-      const mId = t.assignees[0]._id;
+      const mId = getAssigneeId(t.assignees[0]);
       const mPos = memberCoords[mId];
       if (mPos) {
-        const tIndex = tasksByMember[mId].findIndex(x => x._id === t._id);
-        const tCount = tasksByMember[mId].length;
+        const tIndex = (tasksByMember[mId] || []).findIndex(x => x._id === t._id);
+        const tCount = (tasksByMember[mId] || []).length;
         const spread = Math.PI * 0.8;
         const baseAngle = mPos.angle;
-        const angleOffset = tCount === 1 ? 0 : (tIndex / (tCount - 1)) * spread - (spread / 2);
+        const angleOffset = tCount <= 1 ? 0 : (tIndex / (tCount - 1)) * spread - (spread / 2);
         const finalAngle = baseAngle + angleOffset;
         
         taskCoords[t._id] = {
@@ -196,9 +207,10 @@ export default function ProgressionMap() {
     } else {
       let sumX = 0, sumY = 0, validCount = 0;
       t.assignees.forEach(a => {
-        if (memberCoords[a._id]) {
-          sumX += memberCoords[a._id].x;
-          sumY += memberCoords[a._id].y;
+        const aId = getAssigneeId(a);
+        if (memberCoords[aId]) {
+          sumX += memberCoords[aId].x;
+          sumY += memberCoords[aId].y;
           validCount++;
         }
       });
@@ -273,7 +285,6 @@ export default function ProgressionMap() {
         isDraggingMap ? 'cursor-grabbing' : 'cursor-grab'
       }`}
     >
-      {/* Dynamic Floating Keyframes & Glows */}
       <style dangerouslySetInnerHTML={{__html: `
         @keyframes gentleFloat {
           0% { transform: translateY(0px) translateX(0px); }
@@ -298,7 +309,6 @@ export default function ProgressionMap() {
           width: `${CANVAS_WIDTH}px`, 
           height: `${CANVAS_HEIGHT}px`,
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          // Subtle Dot Grid background that pans with the map
           backgroundImage: 'radial-gradient(var(--theme-border) 1px, transparent 1px)',
           backgroundSize: '40px 40px'
         }}
@@ -342,12 +352,13 @@ export default function ProgressionMap() {
             const isDone = t.status === 'done';
 
             return t.assignees.map(a => {
-              const mPos = memberCoords[a._id];
+              const aId = getAssigneeId(a);
+              const mPos = memberCoords[aId];
               if (!mPos) return null;
               
               return (
                 <line
-                  key={`line-t-${t._id}-${a._id}`}
+                  key={`line-t-${t._id}-${aId}`}
                   x1={mPos.x} y1={mPos.y}
                   x2={tPos.x} y2={tPos.y}
                   stroke={isDone ? 'var(--theme-accent)' : 'currentColor'}
@@ -391,8 +402,6 @@ export default function ProgressionMap() {
             : Math.round((pos.totalDone / pos.totalAssigned) * 100);
           
           const floatClass = idx % 3 === 0 ? 'organic-float' : idx % 3 === 1 ? 'organic-float-delay-1' : 'organic-float-delay-2';
-          
-          // Fallback to determine online presence (True if it's the current user for testing)
           const isOnline = m.isOnline || m._id === currentUser._id;
 
           return (
@@ -406,7 +415,6 @@ export default function ProgressionMap() {
                   {m.profilePic ? <img src={m.profilePic} alt={m.name} className="w-full h-full object-cover"/> : m.name.charAt(0).toUpperCase()}
                 </div>
                 
-                {/* 🛑 NEON GREEN ONLINE INDICATOR */}
                 {isOnline && (
                   <div className="absolute bottom-0 right-1 w-4 h-4 bg-[#00FF66] border-[3px] border-theme-bg rounded-full z-30 shadow-[0_0_8px_rgba(0,255,102,0.6)]" title="Online" />
                 )}

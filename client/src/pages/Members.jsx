@@ -16,9 +16,11 @@ const TECHNICAL_ROLES = [
   'Viewer'
 ];
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
 export default function Members() {
   const { activeProject, isLeader, fetchProjects } = useProject();
-  const navigate = useNavigate(); // 👈 Added navigation hook
+  const navigate = useNavigate();
 
   // Mode state: 'roster' vs 'create-project'
   const [isCreatingMode, setIsCreatingMode] = useState(false);
@@ -40,7 +42,7 @@ export default function Members() {
   const [isSearching, setIsSearching] = useState(false);
   const [inviteStatus, setInviteStatus] = useState(null);
 
-  // Member Action Menu State (for removal)
+  // Member Action Menu State
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [removingMemberId, setRemovingMemberId] = useState(null);
 
@@ -54,7 +56,7 @@ export default function Members() {
       setNameStatus('checking');
       try {
         const token = localStorage.getItem('collab_token');
-        const res = await fetch(`http://localhost:5000/api/projects/check?name=${newProjectName}`, {
+        const res = await fetch(`${API_BASE_URL}/api/projects/check?name=${encodeURIComponent(newProjectName)}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await res.json();
@@ -73,13 +75,13 @@ export default function Members() {
     setIsCreatingProject(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/projects`, {
+      const res = await fetch(`${API_BASE_URL}/api/projects`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` 
         },
-        body: JSON.stringify({ name: newProjectName })
+        body: JSON.stringify({ name: newProjectName.trim() })
       });
       if (res.ok) {
         setNewProjectName('');
@@ -88,7 +90,7 @@ export default function Members() {
         await fetchProjects(); 
       } else {
         const errorData = await res.json();
-        alert(errorData.message);
+        alert(errorData.message || 'Error creating project');
       }
     } catch (err) {
       alert('Failed to create project');
@@ -109,7 +111,7 @@ export default function Members() {
     setIsLoadingMembers(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/members?projectId=${activeProject._id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/members?projectId=${activeProject._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -130,7 +132,7 @@ export default function Members() {
         setIsSearching(true);
         try {
           const token = localStorage.getItem('collab_token');
-          const res = await fetch(`http://localhost:5000/api/members/search?q=${searchQuery}`, {
+          const res = await fetch(`${API_BASE_URL}/api/members/search?q=${encodeURIComponent(searchQuery)}`, {
             headers: { Authorization: `Bearer ${token}` }
           });
           if (res.ok) {
@@ -143,7 +145,7 @@ export default function Members() {
           setIsSearching(false);
         }
       } else {
-        searchResults.length > 0 && setSearchResults([]);
+        if (searchResults.length > 0) setSearchResults([]);
       }
     }, 300);
     return () => clearTimeout(delayDebounceFn);
@@ -155,7 +157,7 @@ export default function Members() {
 
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/invite`, {
+      const response = await fetch(`${API_BASE_URL}/api/members/invite`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -189,7 +191,7 @@ export default function Members() {
   const handleRoleChange = async (memberId, newRole) => {
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/role`, {
+      const response = await fetch(`${API_BASE_URL}/api/members/role`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -206,7 +208,7 @@ export default function Members() {
         setMembers(members.map(m => m._id === memberId ? { ...m, role: newRole } : m));
       } else {
         const err = await response.json();
-        alert(err.message);
+        alert(err.message || 'Failed to update role');
       }
     } catch (error) {
       console.error("Failed to update role", error);
@@ -216,7 +218,7 @@ export default function Members() {
   const handleRemoveMember = async (memberId) => {
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/remove`, {
+      const response = await fetch(`${API_BASE_URL}/api/members/remove`, {
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',
@@ -233,7 +235,7 @@ export default function Members() {
         setRemovingMemberId(null);
       } else {
         const err = await response.json();
-        alert(err.message);
+        alert(err.message || 'Failed to remove member');
       }
     } catch (error) {
       console.error("Failed to remove member", error);
@@ -324,7 +326,7 @@ export default function Members() {
             
             <button 
               onClick={() => setIsCreatingMode(true)}
-              className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+              className="bg-white/5 hover:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-900 dark:text-white px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
             >
               <Plus size={14} className="text-[#FF2D88]" /> New Project
             </button>
@@ -364,16 +366,20 @@ export default function Members() {
               members.map((member) => (
                 <div key={member._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-white dark:bg-[#121629] hover:bg-gray-50 dark:hover:bg-[#1a1f36] border border-gray-200 dark:border-white/5 rounded-2xl transition-all shadow-sm group gap-4 relative">
                   
-                  {/* 🛑 CLICKABLE PROFILE ROUTING SECTION */}
+                  {/* Clickable Profile Routing */}
                   <div 
                     onClick={() => navigate(`/user/${member._id}`)} 
                     className="flex items-center gap-4 cursor-pointer flex-1 group/avatar"
                   >
                     <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex items-center justify-center text-white font-bold text-lg shadow-md overflow-hidden transform group-hover/avatar:scale-105 transition-transform duration-300">
-                      {member.profilePic ? <img src={member.profilePic} alt={member.name} className="w-full h-full object-cover"/> : (member.name ? member.name.charAt(0).toUpperCase() : 'U')}
+                      {member.profilePic ? (
+                        <img src={member.profilePic} alt={`${member.name}'s avatar`} className="w-full h-full object-cover"/>
+                      ) : (
+                        (member.name ? member.name.charAt(0).toUpperCase() : 'U')
+                      )}
                     </div>
                     <div>
-                      <h4 className="font-bold text-[15px] group-hover/avatar:text-[#FF2D88] transition-colors duration-200">{member.name || 'Unknown User'}</h4>
+                      <h4 className="font-bold text-[15px] text-gray-900 dark:text-white group-hover/avatar:text-[#FF2D88] transition-colors duration-200">{member.name || 'Unknown User'}</h4>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-1">{member.email}</p>
                       {member.university && (
                         <p className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1 uppercase tracking-wider font-semibold">
@@ -389,11 +395,12 @@ export default function Members() {
                     {isLeader && member.role !== 'Fullstack/Leader' ? (
                       <select 
                         value={member.role}
+                        onClick={(e) => e.stopPropagation()}
                         onChange={(e) => handleRoleChange(member._id, e.target.value)}
                         className={`text-[11px] px-3 py-1.5 rounded-lg font-bold tracking-wider uppercase border cursor-pointer focus:outline-none focus:ring-1 focus:ring-white/20 transition-all ${getRoleColor(member.role)}`}
                       >
                         {TECHNICAL_ROLES.map(role => (
-                          <option key={role} value={role} className="bg-gray-900 text-white">{role}</option>
+                          <option key={role} value={role} className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white">{role}</option>
                         ))}
                       </select>
                     ) : (
@@ -404,28 +411,32 @@ export default function Members() {
 
                     <div className="flex items-center gap-4 text-center relative">
                       <div className="hidden md:block">
-                        <p className="text-sm font-bold">{Math.floor(Math.random() * 20)}</p>
+                        <p className="text-sm font-bold text-gray-900 dark:text-white">{Math.floor(Math.random() * 20)}</p>
                         <p className="text-[9px] text-gray-500 uppercase tracking-widest">Tasks</p>
                       </div>
 
-                      {/* LEADER REMOVE MEMBER BUTTON & POP-IN MENU */}
+                      {/* Leader Action Menu */}
                       {isLeader && member.role !== 'Fullstack/Leader' && (
                         <div className="relative">
                           <button 
-                            onClick={() => setActiveMenuId(activeMenuId === member._id ? null : member._id)}
-                            className="text-gray-400 hover:text-[#FF2D88] transition-colors p-1.5 rounded-lg hover:bg-white/5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(activeMenuId === member._id ? null : member._id);
+                            }}
+                            className="text-gray-400 hover:text-[#FF2D88] transition-colors p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/5"
                           >
                             <MoreVertical size={18}/>
                           </button>
 
                           {activeMenuId === member._id && (
-                            <div className="absolute right-0 top-full mt-2 w-44 bg-[#0A0D14] border border-white/10 rounded-xl shadow-2xl z-50 p-2 animate-in fade-in">
+                            <div className="absolute right-0 top-full mt-2 w-44 bg-white dark:bg-[#0A0D14] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl z-50 p-2 animate-in fade-in">
                               <button 
-                                onClick={() => {
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   setRemovingMemberId(member._id);
                                   setActiveMenuId(null);
                                 }}
-                                className="w-full text-left text-xs font-bold text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
+                                className="w-full text-left text-xs font-bold text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 px-3 py-2 rounded-lg transition-colors flex items-center gap-2"
                               >
                                 <Trash2 size={14} /> Remove Member
                               </button>
@@ -436,10 +447,13 @@ export default function Members() {
                     </div>
                   </div>
 
-                  {/* Confirmation Modal Pop-in for Removal */}
+                  {/* Confirmation Modal */}
                   {removingMemberId === member._id && (
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 rounded-2xl flex items-center justify-between px-6 animate-in fade-in">
-                      <p className="text-xs font-medium text-white">Remove <strong>{member.name}</strong> from project?</p>
+                    <div 
+                      className="absolute inset-0 bg-white/90 dark:bg-black/80 backdrop-blur-sm z-50 rounded-2xl flex items-center justify-between px-6 animate-in fade-in"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="text-xs font-medium text-gray-900 dark:text-white">Remove <strong className="font-bold">{member.name}</strong> from project?</p>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => handleRemoveMember(member._id)}
@@ -449,7 +463,7 @@ export default function Members() {
                         </button>
                         <button 
                           onClick={() => setRemovingMemberId(null)}
-                          className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+                          className="bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/20 text-gray-900 dark:text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
                         >
                           Cancel
                         </button>
@@ -467,7 +481,7 @@ export default function Members() {
         <div className="relative flex flex-col space-y-8 overflow-y-auto premium-scrollbar pb-4 pr-2">
           
           {!isLeader && (
-            <div className="absolute inset-0 z-10 bg-white/50 dark:bg-[#060813]/60 backdrop-blur-[3px] rounded-2xl flex flex-col items-center justify-center p-8 text-center border border-white/10 shadow-2xl">
+            <div className="absolute inset-0 z-10 bg-white/60 dark:bg-[#060813]/60 backdrop-blur-[3px] rounded-2xl flex flex-col items-center justify-center p-8 text-center border border-gray-200 dark:border-white/10 shadow-2xl">
               <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
                 <Shield size={32} className="text-red-500" />
               </div>
@@ -485,7 +499,7 @@ export default function Members() {
             
             <div className="space-y-4 relative">
               <div className="relative">
-                <div className="relative">
+                <div className="relative z-20">
                   <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                   <input 
                     type="text" 
@@ -496,13 +510,13 @@ export default function Members() {
                       setSelectedUser(null);
                     }}
                     disabled={!isLeader}
-                    className="w-full bg-gray-50 dark:bg-[#121629] border border-gray-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:border-[#FF2D88] focus:ring-1 focus:ring-[#FF2D88] transition-all"
+                    className="w-full bg-gray-50 dark:bg-[#121629] border border-gray-200 dark:border-white/5 rounded-xl pl-11 pr-4 py-3.5 text-sm focus:outline-none focus:border-[#FF2D88] focus:ring-1 focus:ring-[#FF2D88] transition-all text-gray-900 dark:text-white"
                   />
                   {isSearching && <Loader2 size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#FF2D88] animate-spin" />}
                 </div>
 
                 {searchResults.length > 0 && !selectedUser && isLeader && (
-                  <div className="absolute top-full mt-2 w-full bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+                  <div className="absolute top-full mt-2 w-full bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl overflow-hidden z-30">
                     {searchResults.map(user => (
                       <div 
                         key={user._id}
@@ -514,7 +528,7 @@ export default function Members() {
                         className="p-3 hover:bg-gray-50 dark:hover:bg-white/5 cursor-pointer flex items-center gap-3 border-b border-gray-100 dark:border-white/5 last:border-0"
                       >
                         <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex-shrink-0 flex items-center justify-center text-white font-bold text-xs overflow-hidden">
-                          {user.profilePic ? <img src={user.profilePic} className="w-full h-full object-cover"/> : user.name.charAt(0).toUpperCase()}
+                          {user.profilePic ? <img src={user.profilePic} alt={`${user.name}'s avatar`} className="w-full h-full object-cover"/> : user.name.charAt(0).toUpperCase()}
                         </div>
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-gray-900 dark:text-white leading-tight">{user.name}</span>
@@ -525,7 +539,7 @@ export default function Members() {
                   </div>
                 )}
                 {searchQuery.length > 1 && !isSearching && searchResults.length === 0 && !selectedUser && isLeader && (
-                  <div className="absolute top-full mt-2 w-full bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-3 z-50 text-center text-sm text-gray-500">
+                  <div className="absolute top-full mt-2 w-full bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-3 z-30 text-center text-sm text-gray-500">
                     No verified users found.
                   </div>
                 )}
@@ -535,7 +549,7 @@ export default function Members() {
                 value={selectedRole}
                 onChange={(e) => setSelectedRole(e.target.value)}
                 disabled={!isLeader}
-                className="w-full bg-gray-50 dark:bg-[#121629] border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-[#FF2D88] appearance-none cursor-pointer transition-colors"
+                className="w-full bg-gray-50 dark:bg-[#121629] border border-gray-200 dark:border-white/5 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:border-[#FF2D88] appearance-none cursor-pointer transition-colors text-gray-900 dark:text-white"
               >
                 {TECHNICAL_ROLES.map(role => (
                   <option key={role} value={role}>{role}</option>

@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, GitCommit, Plus, ArrowLeft, ArrowRight, 
-  Loader2, AlertCircle, User, ArrowUpDown, Check, Briefcase, Calendar, Save, X, Edit2
+  Loader2, AlertCircle, User, ArrowUpDown, Check, Briefcase, Calendar, X, Edit2
 } from 'lucide-react';
-import { useProject } from '../context/ProjectContext'; // 👈 Global Brain Integration
+import { useProject } from '../context/ProjectContext';
 
 export default function Timeline() {
   const navigate = useNavigate();
-  const { activeProject } = useProject(); // 👈 Pulls the active workspace
+  const { activeProject } = useProject();
 
   // --- STATE ---
   const [tasks, setTasks] = useState([]);
@@ -28,6 +28,24 @@ export default function Timeline() {
   // --- TIMELINE DATE STATE ---
   const [currentDate, setCurrentDate] = useState(new Date()); 
 
+  // --- API HELPER FOR RESILIENT FETCHING ---
+  const apiRequest = async (endpoint, options = {}) => {
+    const token = localStorage.getItem('collab_token') || localStorage.getItem('token');
+    const headers = { 
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+      ...options.headers 
+    };
+
+    try {
+      const res = await fetch(endpoint, { ...options, headers });
+      if (res.ok) return res;
+    } catch (e) {
+      // Fallback for standalone backend server on port 5000
+    }
+    return fetch(`http://localhost:5000${endpoint}`, { ...options, headers });
+  };
+
   useEffect(() => {
     if (activeProject) {
       fetchTasks();
@@ -41,16 +59,12 @@ export default function Timeline() {
     setIsLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('collab_token');
-      // 🛑 STRICT SANDBOXING: Fetch ONLY tasks tied to the active project
-      const response = await fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const response = await apiRequest(`/api/tasks?projectId=${activeProject._id}`);
       if (!response.ok) throw new Error('Failed to fetch tasks from server');
       const data = await response.json();
-      setTasks(data || []);
+      setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to connect to backend server');
     } finally {
       setIsLoading(false);
     }
@@ -65,13 +79,8 @@ export default function Timeline() {
 
     setIsUpdating(true);
     try {
-      const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/tasks/${taskId}`, {
+      const response = await apiRequest(`/api/tasks/${taskId}`, {
         method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
         body: JSON.stringify({ 
           startDate: editDates.startDate || null, 
           dueDate: editDates.dueDate || null 
@@ -82,11 +91,10 @@ export default function Timeline() {
       
       const updatedTask = await response.json();
       
-      // Instantly update the local state so the timeline bar snaps to the new position
       setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
       setEditingTaskId(null);
     } catch (err) {
-      alert(err.message);
+      alert(err.message || 'Error saving task dates');
     } finally {
       setIsUpdating(false);
     }
@@ -103,14 +111,19 @@ export default function Timeline() {
   const handlePrevMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
   const handleNextMonth = () => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
 
+  // Safe Assignee Extractor
+  const getAssigneeName = (a) => typeof a === 'object' && a !== null ? a.name : a;
+
   // --- DATA PROCESSING ---
-  const uniqueAssignees = [...new Set(tasks.flatMap(t => t.assignees?.map(a => a.name) || []))].filter(Boolean);
+  const uniqueAssignees = [...new Set(
+    tasks.flatMap(t => t.assignees?.map(a => getAssigneeName(a)) || [])
+  )].filter(Boolean);
 
   const processedTasks = [...tasks]
     .filter(task => {
       if (filterAssignee === 'all') return true;
       if (filterAssignee === 'unassigned') return !task.assignees || task.assignees.length === 0;
-      return task.assignees?.some(a => a.name === filterAssignee);
+      return task.assignees?.some(a => getAssigneeName(a) === filterAssignee);
     })
     .sort((a, b) => {
       if (sortBy === 'newest') return new Date(b.createdAt || Date.now()) - new Date(a.createdAt || Date.now());
@@ -133,7 +146,7 @@ export default function Timeline() {
   // Calculates exactly where the task bar should sit on the CSS Grid
   const getGridPosition = (task) => {
     let start = 1;
-    let end = 2; // Default to a tiny sliver if no end date
+    let end = 2;
 
     const sDate = task.startDate ? new Date(task.startDate) : new Date(task.createdAt);
     const eDate = task.dueDate ? new Date(task.dueDate) : null;
@@ -141,15 +154,15 @@ export default function Timeline() {
     if (sDate) {
       if (sDate.getMonth() === currentDate.getMonth() && sDate.getFullYear() === currentDate.getFullYear()) start = sDate.getDate();
       else if (sDate < currentDate) start = 1;
-      else if (sDate > currentDate) return { display: 'none' }; // Task hasn't started in this month view yet
+      else if (sDate > currentDate) return { display: 'none' };
     }
 
     if (eDate) {
       if (eDate.getMonth() === currentDate.getMonth() && eDate.getFullYear() === currentDate.getFullYear()) end = eDate.getDate() + 1; 
       else if (eDate > currentDate) end = daysInMonth + 1;
-      else if (eDate < currentDate) return { display: 'none' }; // Task was due before this month
+      else if (eDate < currentDate) return { display: 'none' };
     } else {
-      end = start + 3; // Give it an arbitrary 3-day width if no due date is set
+      end = start + 3;
       if (end > daysInMonth + 1) end = daysInMonth + 1;
     }
 
@@ -209,7 +222,6 @@ export default function Timeline() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          
           <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
             <button 
               onClick={() => navigate('/board')} 
@@ -273,8 +285,6 @@ export default function Timeline() {
 
       {/* TIMELINE CONTROL BAR */}
       <div className="flex items-center justify-between bg-white dark:bg-[#121629] p-4 rounded-t-2xl border border-b-0 border-gray-200 dark:border-white/10 flex-shrink-0 shadow-sm z-10 relative">
-        
-        {/* Month Selector */}
         <div className="flex items-center gap-4 bg-gray-50 dark:bg-[#0A0D14] rounded-lg p-1 border border-gray-200 dark:border-white/5">
           <button onClick={handlePrevMonth} className="p-1.5 hover:bg-white dark:hover:bg-white/10 rounded-md transition-colors text-gray-600 dark:text-gray-400"><ArrowLeft size={16}/></button>
           <span className="text-sm font-bold w-32 text-center text-gray-900 dark:text-white">
@@ -295,7 +305,6 @@ export default function Timeline() {
 
       {/* GANTT CHART CONTAINER */}
       <div className="flex-1 bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 rounded-b-2xl overflow-hidden flex flex-col shadow-sm">
-        
         <div className="flex flex-1 overflow-y-auto overflow-x-auto glass-scroll relative">
           <div className="min-w-[1200px] w-full flex flex-col">
             
@@ -339,7 +348,7 @@ export default function Timeline() {
                 processedTasks.map((task) => (
                   <div key={task._id} className="flex border-b border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors group relative">
                     
-                    {/* Left Sidebar Info (WITH INLINE EDITING) */}
+                    {/* Left Sidebar Info */}
                     <div className="w-80 min-w-[320px] p-4 border-r border-gray-200 dark:border-white/10 sticky left-0 z-20 bg-white dark:bg-[#121629] group-hover:bg-gray-50 dark:group-hover:bg-[#1c2135] transition-colors flex items-center">
                       
                       {editingTaskId === task._id ? (
@@ -349,7 +358,9 @@ export default function Timeline() {
                             <span className="text-[10px] font-bold text-[#FF2D88] uppercase">Adjust Dates</span>
                             <div className="flex gap-1">
                               <button onClick={() => setEditingTaskId(null)} className="p-1 hover:bg-gray-200 dark:hover:bg-white/10 rounded text-gray-500"><X size={12}/></button>
-                              <button onClick={() => handleUpdateDates(task._id)} disabled={isUpdating} className="p-1 bg-[#FF2D88] hover:bg-[#ff2d88]/90 text-white rounded"><Check size={12}/></button>
+                              <button onClick={() => handleUpdateDates(task._id)} disabled={isUpdating} className="p-1 bg-[#FF2D88] hover:bg-[#ff2d88]/90 text-white rounded">
+                                {isUpdating ? <Loader2 size={12} className="animate-spin" /> : <Check size={12}/>}
+                              </button>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -391,7 +402,6 @@ export default function Timeline() {
                             </div>
                           </div>
                           
-                          {/* Hover Edit Button */}
                           <button 
                             onClick={() => {
                               setEditingTaskId(task._id);
@@ -411,13 +421,10 @@ export default function Timeline() {
 
                     {/* Right Grid Area (The Timeline Bar) */}
                     <div className="flex-1 grid py-2 relative" style={{ gridTemplateColumns: `repeat(${daysInMonth}, minmax(40px, 1fr))` }}>
-                      
-                      {/* Grid Background Lines */}
                       {daysArray.map(day => (
-                        <div key={`bg-${day}`} className={`border-r border-gray-100/50 dark:border-white/5 col-start-${day} row-start-1 h-full`}></div>
+                        <div key={`bg-${day}`} className="border-r border-gray-100/50 dark:border-white/5 row-start-1 h-full" style={{ gridColumnStart: day }}></div>
                       ))}
 
-                      {/* The Actual Task Bar */}
                       <div 
                         onClick={() => navigate(`/tasks/${task._id}`)}
                         className={`row-start-1 h-8 my-auto rounded-lg mx-1 cursor-pointer transition-all hover:brightness-110 hover:shadow-[0_4px_12px_rgba(0,0,0,0.2)] z-10 flex items-center px-3 overflow-hidden ${task.isOverdue ? 'bg-red-500/80 hover:bg-red-500' : statusColors[task.status] || 'bg-gray-500/80'}`}
