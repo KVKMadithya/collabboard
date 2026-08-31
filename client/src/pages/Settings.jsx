@@ -204,7 +204,15 @@ export default function Settings() {
       }
 
       setStatusMessage({ type: 'success', text: 'All settings saved successfully!' });
-      setTimeout(() => setStatusMessage({ type: '', text: '' }), 4000);
+
+      // 5. Automatically reload if the language was changed
+      if (originalLanguage !== regional.language) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000); // 1-second delay so the success notification is visible
+      } else {
+        setTimeout(() => setStatusMessage({ type: '', text: '' }), 4000);
+      }
 
     } catch (err) {
       console.error("Save Error:", err);
@@ -213,7 +221,6 @@ export default function Settings() {
       setIsSaving(false);
     }
   };
-
   const tabs = [
     { id: 'account', label: 'Email & Password', icon: Lock },
     { id: 'appearance', label: 'Appearance', icon: Palette },
