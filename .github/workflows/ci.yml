@@ -1,0 +1,34 @@
+name: CollabBoard CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Backend - Install Dependencies
+      working-directory: ./server
+      run: npm install
+
+    - name: Frontend - Install Dependencies & Build Check
+      working-directory: ./client
+      run: |
+        npm install
+        npm run build
