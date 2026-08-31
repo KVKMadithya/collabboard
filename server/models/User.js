@@ -15,7 +15,12 @@ const userSchema = new mongoose.Schema({
     rater: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     score: { type: Number, required: true }
   }],
-  // 🛑 THE FIX: We formally introduce the preferences object to the database
+  
+  // ⭐ NEW: Future-proofed arrays to build the ultimate /starred dashboard
+  starredTasks: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }],
+  starredNotes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Note' }],
+  starredReports: [{ type: mongoose.Schema.Types.ObjectId, ref: 'ReportModule' }],
+
   preferences: {
     accentColor: { type: String, default: '#FF2D88' },
     language: { type: String, default: 'en' },

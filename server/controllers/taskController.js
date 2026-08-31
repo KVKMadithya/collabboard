@@ -1,15 +1,16 @@
 const Task = require('../models/Task');
+const User = require('../models/User'); // 👈 NEW: Imported to handle Two-Way Binding
 
 // GET /api/tasks (Fetch all tasks for the ACTIVE project only)
 exports.getTasks = async (req, res) => {
   try {
-    const { projectId } = req.query; // 👈 Extract the project ID from the request
+    const { projectId } = req.query; // Extract the project ID from the request
 
     if (!projectId) {
       return res.status(400).json({ message: "Project ID is required to fetch tasks." });
     }
 
-    // 🛑 STRICT SANDBOXING: Fetch tasks that only belong to this specific project
+    // STRICT SANDBOXING: Fetch tasks that only belong to this specific project
     const tasks = await Task.find({ project: projectId }).sort({ createdAt: -1 }); 
     
     res.status(200).json(tasks);     
@@ -32,7 +33,6 @@ exports.getTaskById = async (req, res) => {
 // POST /api/tasks (Create a new task locked to a project, with files)
 exports.createTask = async (req, res) => {
   try {
-    // 👈 Added projectId to the destructuring
     let { title, description, status, priority, startDate, dueDate, tags, assignees, projectId } = req.body; 
     
     if (!projectId) {
@@ -56,7 +56,7 @@ exports.createTask = async (req, res) => {
 
     // Create a new Mongoose document
     const newTask = new Task({
-      project: projectId, // 🛑 Binds the task permanently to the active workspace
+      project: projectId, // Binds the task permanently to the active workspace
       title,
       description,
       status,
@@ -102,5 +102,42 @@ exports.deleteTask = async (req, res) => {
     res.status(200).json({ message: "Task deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete task", error });
+  }
+};
+
+// ⭐ NEW: PUT /api/tasks/:id/star (Toggle Star Status with Two-Way Binding)
+exports.toggleStarTask = async (req, res) => {
+  try {
+    const taskId = req.params.id;
+    const userId = req.user._id; // Requires the protect middleware to know who is clicking
+
+    const task = await Task.findById(taskId);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const isStarred = task.starredBy.includes(userId);
+
+    if (isStarred) {
+      // Unstar: Remove from both arrays
+      task.starredBy = task.starredBy.filter(id => id.toString() !== userId.toString());
+      user.starredTasks = user.starredTasks.filter(id => id.toString() !== taskId.toString());
+    } else {
+      // Star: Push to both arrays
+      task.starredBy.push(userId);
+      user.starredTasks.push(taskId);
+    }
+
+    await task.save();
+    await user.save();
+
+    res.status(200).json({ 
+      message: isStarred ? 'Task unstarred' : 'Task starred', 
+      task 
+    });
+  } catch (error) {
+    console.error("Star Toggle Error:", error);
+    res.status(500).json({ message: "Failed to toggle star status", error });
   }
 };

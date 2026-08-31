@@ -15,7 +15,8 @@ import Members from './pages/Members';
 import GitFeed from './pages/GitFeed'; 
 import SearchList from './pages/SearchList';
 import Settings from './pages/Settings';
-import ProgressionMap from './pages/ProgressionMap'; // 👈 Added the Progression Map import
+import ProgressionMap from './pages/ProgressionMap';
+import Starred from './pages/Starred'; // 👈 NEW: Imported the Starred dashboard
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -27,14 +28,17 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ProjectProvider } from './context/ProjectContext'; 
 
 // 🛑 SYNCHRONOUS BOOT SEQUENCE
+// Runs instantly on hard refresh to prevent pink flashes
 const initializeGlobalState = () => {
   try {
     const prefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
     
+    // 1. Instant Color Injection
     if (prefs.accentColor) {
       document.documentElement.style.setProperty('--theme-accent', prefs.accentColor);
     }
     
+    // 2. Aggressive Translation Cookie
     if (prefs.language && prefs.language !== 'en') {
       document.cookie = `googtrans=/en/${prefs.language}; path=/`;
       if (typeof window !== 'undefined') {
@@ -182,9 +186,10 @@ function App() {
               <Route path="/git" element={<GitFeed user={user} />} />
               <Route path="/search" element={<SearchList />} />
               <Route path="/settings" element={<Settings />} />
-              
-              {/* 🛑 NEW ROUTE: Progression Map integrated securely */}
               <Route path="/progression" element={<ProgressionMap />} />
+              
+              {/* 🛑 NEW ROUTE: Starred items dashboard */}
+              <Route path="/starred" element={<Starred />} />
             </Route>
 
           </Routes>

@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { 
   LayoutGrid, GitCommit, Plus, MoreVertical, MessageSquare, 
   Paperclip, User, AlertCircle, Loader2,
-  ArrowUpDown, Check, Briefcase
+  ArrowUpDown, Check, Briefcase, Star // 👈 NEW: Imported Star icon
 } from 'lucide-react';
-import { useProject } from '../context/ProjectContext'; // 👈 Global Brain Integration
+import { useProject } from '../context/ProjectContext';
 
 export default function Tasks() {
   const navigate = useNavigate();
-  const { activeProject } = useProject(); // 👈 Pulls the active workspace
+  const { activeProject } = useProject();
+
+  // --- IDENTIFY CURRENT USER ---
+  const currentUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
+  const currentUserId = currentUser._id || currentUser.id;
 
   // --- STATE ---
   const [tasks, setTasks] = useState([]);
@@ -35,7 +39,6 @@ export default function Tasks() {
     setError(null);
     try {
       const token = localStorage.getItem('collab_token');
-      // 🛑 Fetch ONLY tasks tied to the active project
       const response = await fetch(`http://localhost:5000/api/tasks?projectId=${activeProject._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -46,6 +49,41 @@ export default function Tasks() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- TOGGLE STAR LOGIC ---
+  const handleToggleStar = async (e, taskId) => {
+    e.stopPropagation(); // Prevents the card click event from opening the Task Detail page
+
+    // 1. Optimistic UI Update (Instant feedback)
+    setTasks(prevTasks => prevTasks.map(task => {
+      if (task._id === taskId) {
+        const starredBy = task.starredBy || [];
+        const isCurrentlyStarred = starredBy.includes(currentUserId);
+        
+        return {
+          ...task,
+          starredBy: isCurrentlyStarred
+            ? starredBy.filter(id => id !== currentUserId) // Remove star
+            : [...starredBy, currentUserId]                // Add star
+        };
+      }
+      return task;
+    }));
+
+    // 2. Background API Call
+    try {
+      const token = localStorage.getItem('collab_token');
+      const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/star`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to sync star status with server');
+    } catch (err) {
+      console.error(err);
+      // If it fails, revert the state by re-fetching (fail-safe)
+      fetchTasks(); 
     }
   };
 
@@ -114,7 +152,6 @@ export default function Tasks() {
   return (
     <div className="w-full flex flex-col animate-fade-in text-gray-900 dark:text-white" onClick={() => setActiveDropdown(null)}>
       
-      {/* Custom Glassmorphic Scrollbar Injection */}
       <style dangerouslySetInnerHTML={{__html: `
         .glass-scroll::-webkit-scrollbar { height: 8px; }
         .glass-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
@@ -135,7 +172,6 @@ export default function Tasks() {
 
         <div className="flex flex-wrap items-center gap-3">
           
-          {/* View Toggles (Board vs Timeline) */}
           <div className="flex bg-gray-100 dark:bg-[#0A0D14]/80 backdrop-blur-xl p-1 rounded-xl border border-gray-200 dark:border-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_2px_10px_rgba(255,255,255,0.02)]">
             <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 bg-[#FF2D88] text-white shadow-[0_0_15px_rgba(255,45,136,0.4)]">
               <LayoutGrid size={16} /> Board
@@ -249,66 +285,88 @@ export default function Tasks() {
                 </div>
               </div>
 
-              {/* TASK LIST (Hidden internal scrollbar) */}
+              {/* TASK LIST */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 {colTasks.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-32 opacity-50">
                     <p className="text-sm text-gray-400 dark:text-gray-500 font-medium">No tasks yet.</p>
                   </div>
                 ) : (
-                  colTasks.map((task) => (
-                    <div 
-                      key={task._id} 
-                      onClick={() => navigate(`/tasks/${task._id}`)} 
-                      className={`bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 border-l-4 ${col.border} rounded-xl p-4 cursor-pointer hover:border-gray-300 dark:hover:border-white/30 hover:-translate-y-1 transition-all duration-200 group shadow-sm dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex-shrink-0`}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
-                          task.priority === 'High' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20' : 
-                          task.priority === 'Medium' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20' : 
-                          'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20'
-                        }`}>
-                          {task.priority || 'Normal'}
-                        </span>
-                        <button className="text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-[#FF2D88]">
-                          <MoreVertical size={16}/>
-                        </button>
-                      </div>
-                      
-                      <h4 className="font-bold text-sm mb-2 text-gray-900 dark:text-white group-hover:text-[#FF2D88] transition-colors leading-snug">{task.title}</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-4 leading-relaxed">{task.description}</p>
-                      
-                      {task.tags && task.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mb-4">
-                          {task.tags.map(tag => (
-                            <span key={tag} className="bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 text-[10px] px-2 py-0.5 rounded font-medium">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                  colTasks.map((task) => {
+                    const isStarred = task.starredBy?.includes(currentUserId);
 
-                      <div className="flex items-center justify-between text-gray-400 dark:text-gray-500 text-xs pt-4 border-t border-gray-100 dark:border-white/5">
-                        <div className="flex items-center gap-3">
-                          <span className="flex items-center gap-1 font-medium"><MessageSquare size={12}/> {task.commentsCount || 0}</span>
-                          {task.attachmentsCount > 0 && (
-                            <span className="flex items-center gap-1 font-medium"><Paperclip size={12}/> {task.attachmentsCount}</span>
-                          )}
+                    return (
+                      <div 
+                        key={task._id} 
+                        onClick={() => navigate(`/tasks/${task._id}`)} 
+                        className={`bg-white dark:bg-[#121629] border border-gray-200 dark:border-white/10 border-l-4 ${col.border} rounded-xl p-4 cursor-pointer hover:border-gray-300 dark:hover:border-white/30 hover:-translate-y-1 transition-all duration-200 group shadow-sm dark:shadow-[0_4px_20px_rgba(0,0,0,0.3)] flex-shrink-0`}
+                      >
+                        <div className="flex justify-between items-start mb-2">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded ${
+                            task.priority === 'High' ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/20' : 
+                            task.priority === 'Medium' ? 'bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-500/20' : 
+                            'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border border-green-200 dark:border-green-500/20'
+                          }`}>
+                            {task.priority || 'Normal'}
+                          </span>
+                          
+                          {/* ⭐ NEW: Star Toggle & More Icon */}
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={(e) => handleToggleStar(e, task._id)}
+                              className="transition-transform hover:scale-110"
+                              title={isStarred ? "Unstar Task" : "Star Task"}
+                            >
+                              <Star 
+                                size={16} 
+                                className={`transition-colors duration-200 ${
+                                  isStarred 
+                                    ? 'fill-yellow-400 text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]' 
+                                    : 'text-gray-400 dark:text-gray-500 hover:text-yellow-400'
+                                }`} 
+                              />
+                            </button>
+                            <button className="text-gray-400 dark:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity hover:text-[#FF2D88]">
+                              <MoreVertical size={16}/>
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          {task.assignees?.length > 0 && (
-                            <div className="flex -space-x-1.5 mr-1">
-                              {task.assignees.map((a, i) => (
-                                <div key={i} className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex items-center justify-center text-[9px] text-white font-bold border-2 border-white dark:border-[#121629] overflow-hidden" title={a.name}>
-                                  {a.profilePic ? <img src={a.profilePic} alt={a.name} className="w-full h-full object-cover"/> : (a.initials || a.name.charAt(0).toUpperCase())}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                        
+                        <h4 className="font-bold text-sm mb-2 text-gray-900 dark:text-white group-hover:text-[#FF2D88] transition-colors leading-snug">{task.title}</h4>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 mb-4 leading-relaxed">{task.description}</p>
+                        
+                        {task.tags && task.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-4">
+                            {task.tags.map(tag => (
+                              <span key={tag} className="bg-gray-100 dark:bg-white/5 border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 text-[10px] px-2 py-0.5 rounded font-medium">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between text-gray-400 dark:text-gray-500 text-xs pt-4 border-t border-gray-100 dark:border-white/5">
+                          <div className="flex items-center gap-3">
+                            <span className="flex items-center gap-1 font-medium"><MessageSquare size={12}/> {task.commentsCount || 0}</span>
+                            {task.attachmentsCount > 0 && (
+                              <span className="flex items-center gap-1 font-medium"><Paperclip size={12}/> {task.attachmentsCount}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {task.assignees?.length > 0 && (
+                              <div className="flex -space-x-1.5 mr-1">
+                                {task.assignees.map((a, i) => (
+                                  <div key={i} className="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-500 to-[#FF2D88] flex items-center justify-center text-[9px] text-white font-bold border-2 border-white dark:border-[#121629] overflow-hidden" title={a.name}>
+                                    {a.profilePic ? <img src={a.profilePic} alt={a.name} className="w-full h-full object-cover"/> : (a.initials || a.name.charAt(0).toUpperCase())}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
               

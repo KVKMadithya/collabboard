@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, StickyNote, CheckSquare, Calendar, 
   TrendingUp, Users, GitBranch, Bot, FileText, Settings,
-  Share2, Star, LayoutTemplate, CheckCircle2, Search, Pin
+  Share2, Star, CheckCircle2, Search, Pin
 } from 'lucide-react';
 import ShareModal from './ShareModal';
 
@@ -12,11 +12,11 @@ export default function Sidebar() {
   const [isPinned, setIsPinned] = useState(false);
   const [isShareOpen, setIsShareOpen] = useState(false); 
   
-  // 🛑 UPDATED: Search State, Ref, and Navigation Hooks
+  // Search State, Ref, and Navigation Hooks
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef(null);
   const navigate = useNavigate();
-  const location = useLocation(); // Needed to check if we are already on the search page
+  const location = useLocation();
   
   const isExpanded = isHovered || isPinned;
 
@@ -33,10 +33,10 @@ export default function Sidebar() {
     { name: 'Settings', icon: <Settings size={20} />, path: '/settings' },
   ];
 
+  // 🛑 THE FIX: Templates removed, keeping only the core power features
   const favorites = [
     { name: 'Shared with me', icon: <Share2 size={20} />, path: '/shared', isAction: true },
     { name: 'Starred', icon: <Star size={20} />, path: '/starred' },
-    { name: 'Templates', icon: <LayoutTemplate size={20} />, path: '/templates' },
   ];
 
   const handleFavoriteClick = (e, item) => {
@@ -46,7 +46,7 @@ export default function Sidebar() {
     }
   };
 
-  // 🛑 NEW: True Live Search Logic
+  // True Live Search Logic
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchQuery(value);
@@ -74,20 +74,19 @@ export default function Sidebar() {
       <aside 
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        className={`fixed lg:relative z-40 h-screen bg-theme-panel/95 backdrop-blur-2xl border-r border-theme-border flex flex-col text-theme-text font-sans transition-all duration-400 ease-in-out ${
+        className={`fixed lg:relative z-40 h-screen bg-theme-panel/95 backdrop-blur-2xl border-r border-theme-border flex flex-col text-theme-text font-sans transition-all duration-300 ease-in-out shadow-2xl lg:shadow-none ${
           isExpanded ? 'w-64' : 'w-[84px]'
         }`}
       >
         
         {/* --- Brand Header --- */}
-        <div className="p-6 pb-4 flex flex-col gap-6 overflow-hidden">
+        <div className="p-6 pb-4 flex flex-col gap-6 overflow-hidden flex-shrink-0">
           
           <div className="flex items-center justify-between text-2xl font-bold text-theme-text whitespace-nowrap">
             <div className="flex items-center gap-3">
-              {/* 🛑 THE FIX: Swapped hardcoded pink for dynamic theme-accent and inline filter for the exact glow effect */}
               <span 
-                className="text-theme-accent" 
-                style={{ filter: 'drop-shadow(0 0 8px var(--theme-accent))' }}
+                className="text-theme-accent transition-all duration-300 drop-shadow-[0_0_8px_var(--theme-accent)] hover:scale-110 cursor-pointer" 
+                onClick={() => navigate('/')}
               >
                 📌
               </span> 
@@ -98,14 +97,14 @@ export default function Sidebar() {
             
             <button 
               onClick={() => setIsPinned(!isPinned)}
-              className={`transition-all duration-300 hover:scale-110 flex-shrink-0 ${
+              className={`transition-all duration-300 hover:scale-110 flex-shrink-0 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 p-1.5 rounded-lg ${
                 isExpanded ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none absolute right-0'
               }`}
               title={isPinned ? "Unpin Sidebar" : "Pin Sidebar"}
             >
               <Pin 
-                size={18} 
-                className={`transition-colors duration-300 ${isPinned ? 'text-theme-accent fill-current' : 'text-theme-muted hover:text-theme-text'}`} 
+                size={16} 
+                className={`transition-colors duration-300 ${isPinned ? 'text-theme-accent fill-current' : 'text-theme-muted'}`} 
               />
             </button>
           </div>
@@ -113,11 +112,12 @@ export default function Sidebar() {
           {/* Search Bar */}
           <div 
             onClick={handleSearchIconClick}
-            className={`bg-theme-bg rounded-xl flex items-center border border-theme-border transition-all duration-300 ${
-              isExpanded ? 'p-2.5 px-3 shadow-inner' : 'p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer justify-center'
+            className={`bg-theme-bg rounded-xl flex items-center border border-theme-border transition-all duration-300 group ${
+              isExpanded ? 'p-2.5 px-3 shadow-inner focus-within:border-theme-accent focus-within:ring-1 focus-within:ring-theme-accent/50' : 'p-3 hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer justify-center hover:border-theme-accent/50'
             }`}
+            title={!isExpanded ? "Search" : ""}
           >
-            <Search size={18} className="text-theme-muted flex-shrink-0" />
+            <Search size={18} className="text-theme-muted flex-shrink-0 group-hover:text-theme-text transition-colors" />
             <input 
               ref={searchInputRef}
               type="search"          
@@ -134,7 +134,7 @@ export default function Sidebar() {
         </div>
 
         {/* --- Main Menu --- */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-2 premium-scrollbar">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-2 custom-scrollbar">
           
           <p className={`text-[10px] font-bold text-theme-muted mb-3 px-2 uppercase tracking-widest transition-all duration-300 whitespace-nowrap ${
             isExpanded ? 'opacity-100' : 'opacity-0 h-0 overflow-hidden m-0'
@@ -206,8 +206,8 @@ export default function Sidebar() {
         </div>
 
         {/* --- Sync Status --- */}
-        <div className="p-5 border-t border-theme-border bg-theme-bg/50">
-          <div className={`flex items-center ${isExpanded ? 'justify-start gap-3' : 'justify-center'} transition-all duration-300`}>
+        <div className="p-5 border-t border-theme-border bg-theme-bg/50 flex-shrink-0">
+          <div className={`flex items-center ${isExpanded ? 'justify-start gap-3' : 'justify-center'} transition-all duration-300`} title="All changes synced">
             <div className="bg-[#00FF66]/10 p-1.5 rounded-full flex-shrink-0 shadow-[0_0_10px_rgba(0,255,102,0.2)]">
               <CheckCircle2 size={18} className="text-[#00FF66]" />
             </div>

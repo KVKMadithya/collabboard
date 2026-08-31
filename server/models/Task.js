@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
-  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true }, // 👈 NEW: Locks this task to a specific project
+  project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true }, 
   title: { type: String, required: true },
   description: { type: String },
   status: { 
@@ -15,24 +15,29 @@ const taskSchema = new mongoose.Schema({
     default: 'Medium' 
   },
   tags: [{ type: String }],
-  startDate: { type: Date }, // Added for Timeline tracking
+  startDate: { type: Date }, 
   dueDate: { type: Date },
   isOverdue: { type: Boolean, default: false },
   commentsCount: { type: Number, default: 0 },
   attachmentsCount: { type: Number, default: 0 },
-  attachments: [{            // Added to store Multer uploaded files
+  attachments: [{            
     filename: String,
     path: String
   }],
   assignees: [{
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // 👈 NEW: Links assignee to a real database user
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, 
     name: String,
     initials: String
   }],
   subtasks: [{
     title: String,
     completed: { type: Boolean, default: false }
+  }],
+  // ⭐ NEW: Tracks which specific users have starred this task
+  starredBy: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User' 
   }]
-}, { timestamps: true }); // Automatically adds createdAt and updatedAt dates
+}, { timestamps: true }); 
 
 module.exports = mongoose.model('Task', taskSchema);
