@@ -76,9 +76,21 @@ const generateChat = async (req, res) => {
     const modelList = await groq.models.list();
     const availableModelIds = modelList.data.map(m => m.id);
     
-    // 🛑 THE FIX: Explicitly prefer large-context models meant for RAG instead of the first random one
-    const preferredModels = ["llama3-8b-8192", "mixtral-8x7b-32768", "llama3-70b-8192"];
-    const activeModel = preferredModels.find(model => availableModelIds.includes(model)) || availableModelIds.find(id => !id.includes("whisper"));
+    const preferredModels = [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "mixtral-8x7b-32768"
+    ];
+
+    // Filter out Whisper, Guard, and Moderation models from fallback
+    const activeModel = 
+      preferredModels.find(model => availableModelIds.includes(model)) || 
+      availableModelIds.find(id => 
+        !id.includes("whisper") && 
+        !id.includes("guard") && 
+        !id.includes("safeguard")
+      ) || 
+      "llama-3.3-70b-versatile";
 
     const response = await groq.chat.completions.create({
       messages: [
