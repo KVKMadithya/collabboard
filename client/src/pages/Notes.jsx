@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Search, ArrowUpDown, LayoutGrid, List as ListIcon, 
-  MoreVertical, Bookmark, Plus, Clock, Trash2, X, Briefcase, Loader2 // 👈 FIXED: Loader2 added here
+  MoreVertical, Bookmark, Plus, Clock, Trash2, X, Briefcase, Loader2 
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext'; 
 
@@ -22,7 +22,7 @@ export default function Notes({ user }) {
 
   const [notes, setNotes] = useState([]);
   const [activeFilter, setActiveFilter] = useState('All');
-  const [searchQuery, setSearchQuery] = useState(''); // 👈 NEW: Search State
+  const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('newest');
   const [isSortOpen, setIsSortOpen] = useState(false);
@@ -32,6 +32,9 @@ export default function Notes({ user }) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newNote, setNewNote] = useState({ title: '', content: '', category: 'Note' });
   const sortRef = useRef(null);
+
+  // Centralized dynamic API URL
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   // Catch TopBar trigger
   useEffect(() => {
@@ -57,7 +60,7 @@ export default function Notes({ user }) {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/notes?projectId=${activeProject._id}`, {
+      const response = await fetch(`${API_URL}/api/notes?projectId=${activeProject._id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -78,7 +81,7 @@ export default function Notes({ user }) {
 
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notes`, {
+      const response = await fetch(`${API_URL}/api/notes`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -104,7 +107,7 @@ export default function Notes({ user }) {
     
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/notes/${noteId}`, {
+      const response = await fetch(`${API_URL}/api/notes/${noteId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -119,12 +122,11 @@ export default function Notes({ user }) {
 
   // 4. Toggle Bookmark 
   const handleToggleBookmark = async (noteId, currentStatus) => {
-    // Optimistic UI Update
     setNotes(notes.map(n => n._id === noteId ? { ...n, isBookmarked: !currentStatus } : n));
     try {
       const token = localStorage.getItem('collab_token');
-      await fetch(`http://localhost:5000/api/notes/${noteId}`, {
-        method: 'PUT', // Requires a PUT route in your backend to update isBookmarked
+      await fetch(`${API_URL}/api/notes/${noteId}`, {
+        method: 'PUT', 
         headers: { 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}` 
@@ -270,7 +272,6 @@ export default function Notes({ user }) {
 
         <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
           
-          {/* 🛑 NEW: Active Search Bar */}
           <div className="relative flex-1 sm:flex-none">
             <input 
               type="text" 
@@ -329,7 +330,6 @@ export default function Notes({ user }) {
       ) : (
         <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10" : "flex flex-col gap-4 pb-10"}>
           
-          {/* Add Note Card Button */}
           <div onClick={() => setIsAddModalOpen(true)} className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-gray-300 dark:border-white/10 hover:border-[#FF2D88]/50 hover:bg-[#FF2D88]/5 bg-gray-50/50 dark:bg-transparent cursor-pointer transition-all duration-300 group shadow-sm ${viewMode === 'grid' ? 'min-h-[220px] p-6' : 'p-6'}`}>
             <div className="w-12 h-12 rounded-full bg-gradient-to-r from-[#FF2D88] to-[#D91E6D] flex items-center justify-center text-white mb-3 group-hover:scale-110 group-hover:shadow-[0_0_20px_rgba(255,45,136,0.4)] transition-all"><Plus size={24} /></div>
             <h3 className="text-gray-900 dark:text-white font-bold mb-1">Add a note</h3>
@@ -338,8 +338,6 @@ export default function Notes({ user }) {
 
           {sortedNotes.map(note => {
             const cat = CATEGORIES[note.category] || CATEGORIES.Note;
-            
-            // Permissions: Can delete if they authored it OR if they are the Team Leader
             const canDelete = user && (user._id === note.author?._id || user.role === 'Team Leader');
             const authorName = note.author ? `${note.author.firstName}` : 'Unknown';
 
@@ -366,7 +364,6 @@ export default function Notes({ user }) {
                     <div className={`flex items-center gap-1.5 text-xs font-semibold ${cat.text}`}>
                       <span>By {authorName} •</span> {getRelativeTime(note.createdAt)}
                     </div>
-                    {/* 🛑 NEW: Interactive Bookmark Button */}
                     <button onClick={() => handleToggleBookmark(note._id, note.isBookmarked)} className="transition-transform hover:scale-110">
                       <Bookmark size={16} className={note.isBookmarked ? cat.text : "text-gray-400 hover:text-gray-600"} fill={note.isBookmarked ? "currentColor" : "none"} />
                     </button>
