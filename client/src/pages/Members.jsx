@@ -73,7 +73,7 @@ export default function Members() {
     setIsCreatingProject(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const res = await fetch('http://localhost:5000/api/projects', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/projects`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ export default function Members() {
 
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/members/invite', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/invite`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -189,7 +189,7 @@ export default function Members() {
   const handleRoleChange = async (memberId, newRole) => {
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/members/role', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/role`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -216,7 +216,7 @@ export default function Members() {
   const handleRemoveMember = async (memberId) => {
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/members/remove', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/remove`, {
         method: 'DELETE',
         headers: { 
           'Content-Type': 'application/json',

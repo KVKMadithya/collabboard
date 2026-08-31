@@ -78,7 +78,7 @@ export default function Notes({ user }) {
 
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/notes', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/notes`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

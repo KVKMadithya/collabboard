@@ -23,7 +23,7 @@ export default function Starred() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/users/starred', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/starred`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

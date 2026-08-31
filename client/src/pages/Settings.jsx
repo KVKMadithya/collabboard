@@ -76,7 +76,7 @@ export default function Settings() {
       if (!token) return;
 
       try {
-        const response = await fetch('http://localhost:5000/api/auth/me', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const data = await response.json();
@@ -135,7 +135,7 @@ export default function Settings() {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(emailData.newEmail)) throw new Error("Please enter a valid email address.");
 
-        const emailRes = await fetch('http://localhost:5000/api/users/email', {
+        const emailRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/email`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ newEmail: emailData.newEmail })
@@ -154,7 +154,7 @@ export default function Settings() {
         if (passwordData.newPassword.length < 6) throw new Error("New password must be at least 6 characters.");
         if (passwordData.newPassword !== passwordData.confirmPassword) throw new Error("New passwords do not match.");
         
-        const passRes = await fetch('http://localhost:5000/api/users/password', {
+        const passRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/password`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ 
@@ -180,7 +180,7 @@ export default function Settings() {
         twoFactorEnabled: security.twoFactorEnabled
       };
 
-      const prefRes = await fetch('http://localhost:5000/api/users/settings', {
+      const prefRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/users/settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ preferences: preferencesPayload })

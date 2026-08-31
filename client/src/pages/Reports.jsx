@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
 
-const API_BASE = 'http://127.0.0.1:5000/api/reports';
+const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/reports`;
 const FILE_BASE = 'http://127.0.0.1:5000';
 
 const COLOR_OPTIONS = ['#A855F7', '#EC4899', '#F43F5E', '#3B82F6', '#10B981', '#F59E0B'];

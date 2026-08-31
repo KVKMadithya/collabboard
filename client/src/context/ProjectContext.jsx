@@ -38,7 +38,7 @@ export const ProjectProvider = ({ children, user }) => {
         return;
       }
 
-      const response = await fetch('http://localhost:5000/api/projects/user', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/projects/user`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

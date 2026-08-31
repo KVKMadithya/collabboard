@@ -79,7 +79,7 @@ export default function Profile({ user, toggleRefresh }) {
     setIsUploading(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch('http://localhost:5000/api/auth/me', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

@@ -108,7 +108,7 @@ export default function Auth({ onLoginSuccess }) {
       setIsLoading(true);
       setError('');
       try {
-        const res = await fetch('http://127.0.0.1:5000/api/auth/google', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/auth/google`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ access_token: tokenResponse.access_token }),
