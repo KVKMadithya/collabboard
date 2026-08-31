@@ -5,6 +5,7 @@ import {
   Loader2, AlertCircle, User, ArrowUpDown, Check, Briefcase, Calendar, X, Edit2
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 NEW: Using centralized API utility
 
 export default function Timeline() {
   const navigate = useNavigate();
@@ -28,24 +29,6 @@ export default function Timeline() {
   // --- TIMELINE DATE STATE ---
   const [currentDate, setCurrentDate] = useState(new Date()); 
 
-  // --- API HELPER FOR RESILIENT FETCHING ---
-  const apiRequest = async (endpoint, options = {}) => {
-    const token = localStorage.getItem('collab_token') || localStorage.getItem('token');
-    const headers = { 
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...options.headers 
-    };
-
-    try {
-      const res = await fetch(endpoint, { ...options, headers });
-      if (res.ok) return res;
-    } catch (e) {
-      // Fallback for standalone backend server on port 5000
-    }
-    return fetch(`http://localhost:5000${endpoint}`, { ...options, headers });
-  };
-
   useEffect(() => {
     if (activeProject) {
       fetchTasks();
@@ -59,9 +42,8 @@ export default function Timeline() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiRequest(`/api/tasks?projectId=${activeProject._id}`);
-      if (!response.ok) throw new Error('Failed to fetch tasks from server');
-      const data = await response.json();
+      // 👈 NEW: Cleaned up fetch using the utility
+      const data = await apiFetch(`/api/tasks?projectId=${activeProject._id}`);
       setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
       setError(err.message || 'Failed to connect to backend server');
@@ -79,17 +61,14 @@ export default function Timeline() {
 
     setIsUpdating(true);
     try {
-      const response = await apiRequest(`/api/tasks/${taskId}`, {
+      // 👈 NEW: Cleaned up PUT request using the utility
+      const updatedTask = await apiFetch(`/api/tasks/${taskId}`, {
         method: 'PUT',
         body: JSON.stringify({ 
           startDate: editDates.startDate || null, 
           dueDate: editDates.dueDate || null 
         })
       });
-
-      if (!response.ok) throw new Error('Failed to update task dates');
-      
-      const updatedTask = await response.json();
       
       setTasks(tasks.map(t => t._id === taskId ? updatedTask : t));
       setEditingTaskId(null);
@@ -403,7 +382,8 @@ export default function Timeline() {
                           </div>
                           
                           <button 
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation(); // 👈 Prevents accidental clicks from bubbling
                               setEditingTaskId(task._id);
                               setEditDates({
                                 startDate: task.startDate ? task.startDate.split('T')[0] : '',

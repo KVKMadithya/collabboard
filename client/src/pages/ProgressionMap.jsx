@@ -5,6 +5,7 @@ import {
   FolderKanban, ZoomIn, ZoomOut, Focus 
 } from 'lucide-react';
 import { useProject } from '../context/ProjectContext';
+import { apiFetch } from '../utils/api'; // 👈 NEW: Using centralized API utility
 
 export default function ProgressionMap() {
   const navigate = useNavigate();
@@ -38,29 +39,11 @@ export default function ProgressionMap() {
       setIsLoading(true);
       setError(null);
       try {
-        const token = localStorage.getItem('collab_token') || localStorage.getItem('token');
-        const headers = { Authorization: `Bearer ${token}` };
-
-        // Helper to attempt relative endpoint first, then fallback to localhost:5000
-        const request = async (endpoint) => {
-          try {
-            const res = await fetch(endpoint, { headers });
-            if (res.ok) return res;
-          } catch (e) {
-            // Fallback for standalone backend server
-          }
-          return fetch(`http://localhost:5000${endpoint}`, { headers });
-        };
-
-        const [membersRes, tasksRes] = await Promise.all([
-          request(`/api/members?projectId=${activeProject._id}`),
-          request(`/api/tasks?projectId=${activeProject._id}`)
+        // 👈 NEW: Cleaned up using centralized apiFetch
+        const [membersData, tasksData] = await Promise.all([
+          apiFetch(`/api/members?projectId=${activeProject._id}`),
+          apiFetch(`/api/tasks?projectId=${activeProject._id}`)
         ]);
-
-        if (!membersRes.ok || !tasksRes.ok) throw new Error("Failed to fetch progression data from server");
-
-        const membersData = await membersRes.json();
-        const tasksData = await tasksRes.json();
 
         setMembers(Array.isArray(membersData) ? membersData : []);
         setTasks(Array.isArray(tasksData) ? tasksData : []);
@@ -134,7 +117,6 @@ export default function ProgressionMap() {
   const unassignedTasks = [];
   const assignedTasks = [];
 
-  // Helper function to safely extract member ID
   const getAssigneeId = (assignee) => typeof assignee === 'object' && assignee !== null ? assignee._id : assignee;
 
   tasks.forEach(t => {
@@ -142,7 +124,6 @@ export default function ProgressionMap() {
     else assignedTasks.push(t);
   });
 
-  // Calculate Member Orbit
   const memberRadius = 350;
   members.forEach((m, i) => {
     const angle = (i / members.length) * 2 * Math.PI - Math.PI / 2;
@@ -155,7 +136,6 @@ export default function ProgressionMap() {
     };
   });
 
-  // Calculate Member Progress Percentages
   assignedTasks.forEach(t => {
     t.assignees.forEach(a => {
       const aId = getAssigneeId(a);
@@ -166,7 +146,6 @@ export default function ProgressionMap() {
     });
   });
 
-  // Calculate Unassigned Tasks Orbit (Inner Ring)
   const unassignedRadius = 180;
   unassignedTasks.forEach((t, i) => {
     const angle = (i / unassignedTasks.length) * 2 * Math.PI;
@@ -176,7 +155,6 @@ export default function ProgressionMap() {
     };
   });
 
-  // Calculate Assigned Tasks Orbit
   const tasksByMember = {};
   members.forEach(m => tasksByMember[m._id] = []);
   
@@ -227,7 +205,6 @@ export default function ProgressionMap() {
     }
   });
 
-  // --- RENDERS ---
   if (!activeProject && !isLoading) {
     return (
       <div className="flex-1 w-full h-[calc(100vh-80px)] flex items-center justify-center animate-fade-in p-8">
@@ -302,7 +279,6 @@ export default function ProgressionMap() {
         .core-pulse { animation: pulseGlow 4s ease-in-out infinite; }
       `}} />
 
-      {/* --- CAMERA WRAPPER --- */}
       <div 
         className="absolute transform-gpu transition-transform duration-75 ease-out origin-center"
         style={{ 
@@ -313,7 +289,6 @@ export default function ProgressionMap() {
           backgroundSize: '40px 40px'
         }}
       >
-        {/* LAYER 1: SVG CONNECTIONS */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
           {unassignedTasks.map(t => {
             const pos = taskCoords[t._id];
@@ -371,9 +346,6 @@ export default function ProgressionMap() {
           })}
         </svg>
 
-        {/* LAYER 2: HTML NODES */}
-        
-        {/* 1. Core Project Node */}
         <div 
           className="no-pan absolute z-10 flex flex-col items-center justify-center w-36 h-36 rounded-full core-pulse cursor-pointer transition-transform hover:scale-105"
           style={{ 
@@ -392,7 +364,6 @@ export default function ProgressionMap() {
           </span>
         </div>
 
-        {/* 2. Team Member Nodes */}
         {members.map((m, idx) => {
           const pos = memberCoords[m._id];
           if (!pos) return null;
@@ -437,7 +408,6 @@ export default function ProgressionMap() {
           );
         })}
 
-        {/* 3. Task Nodes */}
         {tasks.map((t, idx) => {
           const pos = taskCoords[t._id];
           if (!pos) return null;
@@ -470,7 +440,6 @@ export default function ProgressionMap() {
         })}
       </div>
 
-      {/* --- FLOATING ZOOM CONTROLS --- */}
       <div className="absolute bottom-6 right-6 z-50 flex items-center bg-theme-panel border border-theme-border rounded-xl shadow-2xl p-1 gap-1">
         <button 
           className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg text-theme-muted hover:text-theme-text transition-colors"
