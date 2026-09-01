@@ -40,6 +40,8 @@ export default function Whiteboard() {
   const [brushSize, setBrushSize] = useState(4);
   const [isEraser, setIsEraser] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
   
   // Zoom & Scale
   const [scale, setScale] = useState(1);
@@ -69,7 +71,7 @@ export default function Whiteboard() {
   useEffect(() => {
     if (!activeProject || !user) return;
 
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io(API_URL);
     
     socketRef.current.emit('join-board', { 
       projectId: activeProject._id, 

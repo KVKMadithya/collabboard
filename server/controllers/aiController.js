@@ -11,6 +11,7 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 }); 
 
+// 1. FOR TEMP CHAT UPLOADS (Deletes file after reading)
 const extractTextFromFile = async (file) => {
   if (!file) return "";
   try {
@@ -41,6 +42,29 @@ const extractTextFromFile = async (file) => {
   }
 };
 
+// 2. NEW: FOR SAVED DATABASE REPORTS (Does NOT delete the file)
+const extractTextFromSavedPath = async (filePath) => {
+  if (!filePath || !fs.existsSync(filePath)) return "";
+  try {
+    const buffer = fs.readFileSync(filePath);
+    const ext = filePath.split('.').pop().toLowerCase();
+    
+    if (ext === 'pdf') {
+      const data = await pdfParse(buffer);
+      return data.text;
+    } else if (ext === 'docx') {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    } else if (ext === 'txt') {
+      return buffer.toString('utf-8');
+    }
+    return "";
+  } catch (error) {
+    console.error(`Failed to read saved report at ${filePath}:`, error);
+    return ""; // Return empty string rather than crashing the whole chat
+  }
+};
+
 const generateChat = async (req, res) => {
   try {
     const { message, mode, projectId } = req.body;
@@ -53,17 +77,42 @@ const generateChat = async (req, res) => {
     let systemPrompt = "You are CollabBoard's elite AI Assistant. You are helpful, highly intelligent, and concise. Format your answers beautifully using markdown (bullet points, bold text).";
 
     if (mode === 'workspace' && projectId) {
+      // FIX 1: Checking both 'project' and 'projectId' fields to ensure we don't miss data
+      const query = { $or: [{ project: projectId }, { projectId: projectId }] };
+
       const [tasks, notes, reports] = await Promise.all([
-        Task.find({ project: projectId }).select('title description status priority'),
-        Note.find({ project: projectId }).select('title content category'),
-        ReportModule.find({ project: projectId }).select('name description proposal finalReport dataReport')
+        Task.find(query).select('title description status priority'),
+        Note.find(query).select('title content category'),
+        ReportModule.find(query).select('name description proposal finalReport dataReport')
       ]);
+
+      // FIX 2: Loop through reports and extract the actual text from the physical files
+      let reportsWithText = [];
+      for (const report of reports) {
+        let reportContent = "";
+        
+        if (report.proposal) {
+          reportContent += `\n[Proposal Document]:\n` + await extractTextFromSavedPath(report.proposal);
+        }
+        if (report.finalReport) {
+          reportContent += `\n[Final Report Document]:\n` + await extractTextFromSavedPath(report.finalReport);
+        }
+        if (report.dataReport) {
+          reportContent += `\n[Data Report Document]:\n` + await extractTextFromSavedPath(report.dataReport);
+        }
+
+        reportsWithText.push({
+          name: report.name,
+          description: report.description,
+          extractedFileContent: reportContent
+        });
+      }
 
       systemPrompt += `\n\nYou are currently assisting a user within a specific Workspace. Here is the live data from their database:\n`;
       systemPrompt += `\n--- TASKS ---\n${JSON.stringify(tasks)}`;
       systemPrompt += `\n--- NOTES ---\n${JSON.stringify(notes)}`;
-      systemPrompt += `\n--- REPORTS METADATA ---\n${JSON.stringify(reports)}`;
-      systemPrompt += `\n\nUse the data above to accurately answer questions about their project.`;
+      systemPrompt += `\n--- REPORTS CONTENT ---\n${JSON.stringify(reportsWithText)}`;
+      systemPrompt += `\n\nUse the data above to accurately answer questions about their project. If the user asks about a report, read the extracted file content provided above.`;
     }
 
     let finalUserPrompt = message || "Please summarize the attached document.";
@@ -82,7 +131,6 @@ const generateChat = async (req, res) => {
       "mixtral-8x7b-32768"
     ];
 
-    // Filter out Whisper, Guard, and Moderation models from fallback
     const activeModel = 
       preferredModels.find(model => availableModelIds.includes(model)) || 
       availableModelIds.find(id => 
@@ -99,7 +147,6 @@ const generateChat = async (req, res) => {
       ],
       model: activeModel, 
       temperature: 0.5,
-      // 🛑 THE FIX: Removed strict max_tokens so it uses the model's default maximum
     });
 
     const aiMessage = response.choices[0]?.message?.content;
