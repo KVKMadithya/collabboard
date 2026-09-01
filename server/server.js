@@ -59,24 +59,25 @@ io.on('connection', (socket) => {
 
   // Room Subscription: Isolate drawings to a specific workspace
   socket.on('join-board', (data) => {
-    const projectId = typeof data === 'object' ? data.projectId : data;
+    // 🛑 FORCE STRING: Normalizes ObjectIds so users don't end up in parallel rooms
+    const projectId = String(typeof data === 'object' ? data.projectId : data);
     socket.join(projectId);
     console.log(`👤 User ${socket.id} joined whiteboard room: ${projectId}`);
   });
 
   // Relay drawing coordinates to everyone else in the workspace
   socket.on('draw-line', ({ projectId, drawingData }) => {
-    socket.to(projectId).emit('draw-line', drawingData);
+    socket.to(String(projectId)).emit('draw-line', drawingData); // 🛑 String cast
   });
 
   // Relay live cursor movements (Google Docs style)
   socket.on('cursor-move', (data) => {
-    socket.to(data.projectId).emit('cursor-move', data);
+    socket.to(String(data.projectId)).emit('cursor-move', data); // 🛑 String cast
   });
 
   // Relay board wipe commands
   socket.on('clear-board', (projectId) => {
-    socket.to(projectId).emit('clear-board');
+    socket.to(String(projectId)).emit('clear-board'); // 🛑 String cast
   });
 
   socket.on('disconnect', () => {

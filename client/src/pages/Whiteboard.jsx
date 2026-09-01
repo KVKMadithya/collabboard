@@ -25,6 +25,11 @@ const loadScript = (src) => {
 export default function Whiteboard() {
   const { activeProject, user } = useProject(); 
 
+  // 🛑 FIX 1: Extract primitive values to prevent React object re-render disconnect loops
+  const projId = activeProject?._id;
+  const userId = user?._id;
+  const userName = user?.firstName;
+
   // --- REFS ---
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -67,40 +72,48 @@ export default function Whiteboard() {
   }, [color, brushSize, isEraser, scale]);
 
   const broadcastCursor = useCallback((x, y) => {
-    if (!socketRef.current || !user) return;
+    if (!socketRef.current || !userId) return;
     socketRef.current.emit('cursor-move', {
-      projectId: activeProject._id,
-      userId: user._id,
-      name: user.firstName,
+      projectId: projId, // Uses primitive now
+      userId: userId,    // Uses primitive now
+      name: userName,    // Uses primitive now
       color: drawStateRef.current.color,
       x, y
     });
-  }, [activeProject, user]);
+  }, [projId, userId, userName]); // 🛑 Dependency fixed
 
   // --- 1. BULLETPROOF SOCKET CONNECTION ---
   useEffect(() => {
-    if (!activeProject || !user) return;
+    if (!projId || !userId) return;
 
-    // FIX 1: Explicit transports ensure connection stability on deployed platforms (Vercel/Railway)
+    // 🛑 FIX 2: Force strict WebSocket transport (stops Vercel/Railway from dropping polling connections)
     const socket = io(API_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 10
+      transports: ['websocket'],
+      upgrade: false 
     });
     
     socketRef.current = socket;
 
-    // FIX 2: Only join the board AFTER the socket physically connects to survive React strict mode & drops
-    socket.on('connect', () => {
-      socket.emit('join-board', { 
-        projectId: activeProject._id, 
-        user: { _id: user._id, name: user.firstName, color: drawStateRef.current.color }
+    // 🛑 FIX 3: Safe Join Logic (Handles race condition if socket connects too fast)
+    const joinRoom = () => {
+      socket.emit('join-board', { projectId: projId });
+      // Instantly broadcast a "ghost" cursor off-screen so the user appears in the top bar instantly
+      socket.emit('cursor-move', { 
+        projectId: projId, 
+        userId: userId, 
+        name: userName, 
+        color: drawStateRef.current.color, 
+        x: -9999, 
+        y: -9999 
       });
-      // FIX 3: Instantly broadcast an "off-screen" cursor so the user immediately shows up in the top bar for everyone else
-      broadcastCursor(-9999, -9999);
-    });
+    };
 
-    // FIX 4: Bulletproof payload handling (checks if backend nested the data or sent it raw)
+    if (socket.connected) {
+      joinRoom();
+    } else {
+      socket.on('connect', joinRoom);
+    }
+
     socket.on('draw-line', (payload) => {
       const data = payload.drawingData || payload; 
       drawOnCanvas(data.x0, data.y0, data.x1, data.y1, data.color, data.size, data.isEraser, false);
@@ -115,12 +128,10 @@ export default function Whiteboard() {
     });
 
     socket.on('cursor-move', (data) => {
-      // Don't render the cursor if it's our initial "ghost" presence broadcast
       if (data.x !== -9999) {
         setLiveCursors(prev => ({ ...prev, [data.userId]: data }));
       }
       
-      // Update active users (and automatically sync their color if they change their pen color!)
       setActiveUsers(prev => {
         const existingUser = prev.find(u => u._id === data.userId);
         if (!existingUser) {
@@ -133,11 +144,10 @@ export default function Whiteboard() {
       });
     });
 
-    // Clean up connections if user leaves project
     return () => {
       socket.disconnect();
     };
-  }, [activeProject, user, broadcastCursor]);
+  }, [projId, userId, userName, API_URL]); // 🛑 FIX 4: Only primitive dependencies. Stops infinite disconnects!
 
   // --- 2. INITIALIZE CANVAS BACKGROUND ---
   useEffect(() => {
@@ -170,7 +180,7 @@ export default function Whiteboard() {
     if (!emit || !socketRef.current) return;
 
     socketRef.current.emit('draw-line', {
-      projectId: activeProject._id,
+      projectId: projId, // Uses primitive now
       drawingData: { x0, y0, x1, y1, color: strokeColor, size: strokeSize, isEraser: erase }
     });
   };
@@ -211,7 +221,7 @@ export default function Whiteboard() {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (socketRef.current) socketRef.current.emit('clear-board', activeProject._id);
+    if (socketRef.current) socketRef.current.emit('clear-board', projId); // Uses primitive now
   };
 
   // --- 5. PINCH-TO-ZOOM / FIT TO SCREEN ENGINE ---
