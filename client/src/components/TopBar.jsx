@@ -24,6 +24,9 @@ export default function TopBar({ user, onSignOut }) {
   const notifRef = useRef(null);
   const projectRef = useRef(null);
 
+  // 🛑 Centralized dynamic API URL
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
   // 🛑 THE BULLETPROOF GOOGLE TRANSLATE WATCHDOG
   useEffect(() => {
     const obliterateGoogleBar = () => {
@@ -82,7 +85,8 @@ export default function TopBar({ user, onSignOut }) {
     try {
       const token = localStorage.getItem('collab_token');
       if (!token) return;
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/members/notifications`, {
+      // 👇 Updated to use API_URL
+      const response = await fetch(`${API_URL}/api/members/notifications`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (response.ok) {
@@ -118,7 +122,8 @@ export default function TopBar({ user, onSignOut }) {
     setIsNotifLoading(true);
     try {
       const token = localStorage.getItem('collab_token');
-      const response = await fetch(`http://localhost:5000/api/members/notifications/${notificationId}/respond`, {
+      // 👇 Updated to use API_URL
+      const response = await fetch(`${API_URL}/api/members/notifications/${notificationId}/respond`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -147,8 +152,8 @@ export default function TopBar({ user, onSignOut }) {
   const handleReadAndNavigate = async (notif) => {
     try {
       const token = localStorage.getItem('collab_token');
-      // Mark as read in DB so it stops showing as pending/new
-      await fetch(`http://localhost:5000/api/members/notifications/${notif._id}/read`, {
+      // 👇 Updated to use API_URL
+      await fetch(`${API_URL}/api/members/notifications/${notif._id}/read`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
