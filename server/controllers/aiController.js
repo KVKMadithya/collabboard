@@ -2,6 +2,7 @@ const Groq = require("groq-sdk");
 const fs = require('fs');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const mongoose = require('mongoose'); // 🛑 NEW: Required to fix the Task/Note ID query issue
 
 const Task = require('../models/Task');
 const Note = require('../models/Note');
@@ -10,6 +11,15 @@ const ReportModule = require('../models/ReportModule');
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
 }); 
+
+// 🛑 NEW: Prevent 413 Entity Too Large errors by capping text length
+const MAX_CHARS = 12000; 
+const truncateText = (text) => {
+  if (text.length > MAX_CHARS) {
+    return text.substring(0, MAX_CHARS) + "\n...[CONTENT TRUNCATED DUE TO SIZE LIMITS]";
+  }
+  return text;
+};
 
 // 1. FOR TEMP CHAT UPLOADS (Deletes file after reading)
 const extractTextFromFile = async (file) => {
@@ -34,7 +44,7 @@ const extractTextFromFile = async (file) => {
       if (err) console.error("Failed to delete temp file:", err);
     });
 
-    return extractedText;
+    return truncateText(extractedText); // 🛑 Updated to truncate
   } catch (error) {
     console.error("Document Parsing Error:", error);
     if (file && file.path) fs.unlink(file.path, () => {}); 
@@ -42,23 +52,25 @@ const extractTextFromFile = async (file) => {
   }
 };
 
-// 2. NEW: FOR SAVED DATABASE REPORTS (Does NOT delete the file)
+// 2. FOR SAVED DATABASE REPORTS (Does NOT delete the file)
 const extractTextFromSavedPath = async (filePath) => {
   if (!filePath || !fs.existsSync(filePath)) return "";
   try {
     const buffer = fs.readFileSync(filePath);
     const ext = filePath.split('.').pop().toLowerCase();
     
+    let extracted = "";
     if (ext === 'pdf') {
       const data = await pdfParse(buffer);
-      return data.text;
+      extracted = data.text;
     } else if (ext === 'docx') {
       const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      extracted = result.value;
     } else if (ext === 'txt') {
-      return buffer.toString('utf-8');
+      extracted = buffer.toString('utf-8');
     }
-    return "";
+    
+    return truncateText(extracted); // 🛑 Updated to truncate
   } catch (error) {
     console.error(`Failed to read saved report at ${filePath}:`, error);
     return ""; // Return empty string rather than crashing the whole chat
@@ -77,8 +89,12 @@ const generateChat = async (req, res) => {
     let systemPrompt = "You are CollabBoard's elite AI Assistant. You are helpful, highly intelligent, and concise. Format your answers beautifully using markdown (bullet points, bold text).";
 
     if (mode === 'workspace' && projectId) {
-      // FIX 1: Checking both 'project' and 'projectId' fields to ensure we don't miss data
-      const query = { $or: [{ project: projectId }, { projectId: projectId }] };
+      // 🛑 FIX 1: Cast string ID to MongoDB ObjectId to ensure queries don't fail
+      const validProjectId = mongoose.Types.ObjectId.isValid(projectId) 
+        ? new mongoose.Types.ObjectId(projectId) 
+        : projectId;
+        
+      const query = { $or: [{ project: validProjectId }, { projectId: validProjectId }] };
 
       const [tasks, notes, reports] = await Promise.all([
         Task.find(query).select('title description status priority'),

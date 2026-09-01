@@ -32,7 +32,7 @@ export default function Whiteboard() {
   const socketRef = useRef(null);
   const cameraRef = useRef(null);
   const handsRef = useRef(null);
-  const gesturePointerRef = useRef(null); // Direct DOM manipulation for zero-lag cursor
+  const gesturePointerRef = useRef(null); 
 
   // --- STATE ---
   const [isDrawing, setIsDrawing] = useState(false);
@@ -61,28 +61,52 @@ export default function Whiteboard() {
   const smoothedPos = useRef({ x: 0, y: 0 });
 
   // --- DRAWING STATE REF --- 
-  // (Prevents camera from restarting when changing colors/tools)
   const drawStateRef = useRef({ color, brushSize, isEraser, scale });
   useEffect(() => {
     drawStateRef.current = { color, brushSize, isEraser, scale };
   }, [color, brushSize, isEraser, scale]);
 
-  // --- 1. SOCKET CONNECTION & MULTIPLAYER PRESENCE ---
+  const broadcastCursor = useCallback((x, y) => {
+    if (!socketRef.current || !user) return;
+    socketRef.current.emit('cursor-move', {
+      projectId: activeProject._id,
+      userId: user._id,
+      name: user.firstName,
+      color: drawStateRef.current.color,
+      x, y
+    });
+  }, [activeProject, user]);
+
+  // --- 1. BULLETPROOF SOCKET CONNECTION ---
   useEffect(() => {
     if (!activeProject || !user) return;
 
-    socketRef.current = io(API_URL);
+    // FIX 1: Explicit transports ensure connection stability on deployed platforms (Vercel/Railway)
+    const socket = io(API_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 10
+    });
     
-    socketRef.current.emit('join-board', { 
-      projectId: activeProject._id, 
-      user: { _id: user._id, name: user.firstName, color: color }
+    socketRef.current = socket;
+
+    // FIX 2: Only join the board AFTER the socket physically connects to survive React strict mode & drops
+    socket.on('connect', () => {
+      socket.emit('join-board', { 
+        projectId: activeProject._id, 
+        user: { _id: user._id, name: user.firstName, color: drawStateRef.current.color }
+      });
+      // FIX 3: Instantly broadcast an "off-screen" cursor so the user immediately shows up in the top bar for everyone else
+      broadcastCursor(-9999, -9999);
     });
 
-    socketRef.current.on('draw-line', (data) => {
+    // FIX 4: Bulletproof payload handling (checks if backend nested the data or sent it raw)
+    socket.on('draw-line', (payload) => {
+      const data = payload.drawingData || payload; 
       drawOnCanvas(data.x0, data.y0, data.x1, data.y1, data.color, data.size, data.isEraser, false);
     });
 
-    socketRef.current.on('clear-board', () => {
+    socket.on('clear-board', () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
@@ -90,20 +114,30 @@ export default function Whiteboard() {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     });
 
-    socketRef.current.on('cursor-move', (data) => {
-      setLiveCursors(prev => ({ ...prev, [data.userId]: data }));
+    socket.on('cursor-move', (data) => {
+      // Don't render the cursor if it's our initial "ghost" presence broadcast
+      if (data.x !== -9999) {
+        setLiveCursors(prev => ({ ...prev, [data.userId]: data }));
+      }
+      
+      // Update active users (and automatically sync their color if they change their pen color!)
       setActiveUsers(prev => {
-        if (!prev.find(u => u._id === data.userId)) {
+        const existingUser = prev.find(u => u._id === data.userId);
+        if (!existingUser) {
           return [...prev, { _id: data.userId, name: data.name, color: data.color }];
+        }
+        if (existingUser.color !== data.color) {
+          return prev.map(u => u._id === data.userId ? { ...u, color: data.color } : u);
         }
         return prev;
       });
     });
 
+    // Clean up connections if user leaves project
     return () => {
-      if (socketRef.current) socketRef.current.disconnect();
+      socket.disconnect();
     };
-  }, [activeProject, user]);
+  }, [activeProject, user, broadcastCursor]);
 
   // --- 2. INITIALIZE CANVAS BACKGROUND ---
   useEffect(() => {
@@ -138,17 +172,6 @@ export default function Whiteboard() {
     socketRef.current.emit('draw-line', {
       projectId: activeProject._id,
       drawingData: { x0, y0, x1, y1, color: strokeColor, size: strokeSize, isEraser: erase }
-    });
-  };
-
-  const broadcastCursor = (x, y) => {
-    if (!socketRef.current || !user) return;
-    socketRef.current.emit('cursor-move', {
-      projectId: activeProject._id,
-      userId: user._id,
-      name: user.firstName,
-      color: drawStateRef.current.color,
-      x, y
     });
   };
 
@@ -215,7 +238,7 @@ export default function Whiteboard() {
     return () => clearTimeout(timer);
   }, [isExpanded, fitToScreen]);
 
-  // --- 6. ADVANCED GESTURE TRACKING (WRITING & SMOOTHING ENGINE) ---
+  // --- 6. ADVANCED GESTURE TRACKING ---
   useEffect(() => {
     if (!isGestureMode) {
       if (gesturePointerRef.current) gesturePointerRef.current.style.opacity = '0';
@@ -261,7 +284,6 @@ export default function Whiteboard() {
             const middleMCP = landmarks[9];
 
             const containerRect = container.getBoundingClientRect();
-            // Map camera coordinates smoothly to the visible container 
             const screenX = containerRect.left + (1 - indexTip.x) * containerRect.width;
             const screenY = containerRect.top + indexTip.y * containerRect.height;
 
@@ -269,15 +291,13 @@ export default function Whiteboard() {
             const targetX = rawCanvasCoords.x;
             const targetY = rawCanvasCoords.y;
 
-            // 🚀 Dynamic Velocity Smoothing (The secret to writing)
-            // Fast moves get less smoothing to catch up. Slow moves get high smoothing to stop jitter.
             const dx = targetX - smoothedPos.current.x;
             const dy = targetY - smoothedPos.current.y;
             const distance = Math.hypot(dx, dy);
             
             let alpha = 0.45; 
-            if (distance > 40) alpha = 0.8; // Quick snap for fast strokes
-            else if (distance < 5) alpha = 0.2; // Heavy stabilization for drawing fine details
+            if (distance > 40) alpha = 0.8; 
+            else if (distance < 5) alpha = 0.2; 
 
             smoothedPos.current.x = smoothedPos.current.x === 0 ? targetX : smoothedPos.current.x + dx * alpha;
             smoothedPos.current.y = smoothedPos.current.y === 0 ? targetY : smoothedPos.current.y + dy * alpha;
@@ -285,12 +305,10 @@ export default function Whiteboard() {
             const currentX = smoothedPos.current.x;
             const currentY = smoothedPos.current.y;
 
-            // 🚀 Enhanced Pinch Detection (Incorporates Z depth for accuracy)
             const handScale = Math.hypot(middleMCP.x - wrist.x, middleMCP.y - wrist.y);
             const pinchDistance = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y, (indexTip.z - thumbTip.z) * 1.5);
             const pinchRatio = pinchDistance / handScale;
 
-            // Stricter Hysteresis (Prevents accidental pen lifts while writing)
             if (!isPinchingRef.current && pinchRatio < 0.15) {
               isPinchingRef.current = true;
               lastPos.current = { x: currentX, y: currentY };
@@ -306,7 +324,6 @@ export default function Whiteboard() {
               lastPos.current = { x: currentX, y: currentY };
             }
 
-            // 🚀 Zero-Lag DOM Cursor Update
             if (gesturePointerRef.current) {
               const ptr = gesturePointerRef.current;
               ptr.style.opacity = '1';
@@ -359,7 +376,7 @@ export default function Whiteboard() {
       if (handsRef.current) { try { handsRef.current.close(); } catch (e) {} handsRef.current = null; }
       setIsCameraReady(false);
     };
-  }, [isGestureMode, getCanvasCoords]); // Only re-run if gesture mode toggles (not on color changes!)
+  }, [isGestureMode, getCanvasCoords, broadcastCursor]); 
 
   if (!activeProject) return null;
 
@@ -474,7 +491,7 @@ export default function Whiteboard() {
                 className={`absolute top-0 left-0 w-[2400px] h-[1600px] block touch-none ${isGestureMode ? 'cursor-none' : 'cursor-crosshair'}`}
               />
 
-              {/* 🚀 HIGH-PERFORMANCE DOM GESTURE POINTER (ZERO RE-RENDERS) */}
+              {/* 🚀 HIGH-PERFORMANCE DOM GESTURE POINTER */}
               <div 
                 ref={gesturePointerRef}
                 className="absolute rounded-full pointer-events-none z-40 ease-out transition-all duration-75"
