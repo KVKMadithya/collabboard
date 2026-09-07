@@ -27,7 +27,7 @@
   --color-border: rgba(255, 255, 255, 0.05);
 }
 
-/* --- GLOBAL GLASSMORPHIC SCROLLBAR (Applies everywhere automatically) --- */
+/* --- GLOBAL GLASSMORPHIC SCROLLBAR --- */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -46,7 +46,7 @@
   background: rgba(255, 45, 136, 0.5); /* Brand Neon Pink on Hover */
 }
 
-/* --- Premium Glassmorphism Scrollbar (For ultra-thin specific containers) --- */
+/* --- Premium Glassmorphism Scrollbar --- */
 .premium-scrollbar::-webkit-scrollbar {
   width: 5px;
 }
@@ -75,8 +75,6 @@
 }
 
 /* 🛑 BRUTAL OVERRIDES TO HIDE GOOGLE TRANSLATE ARTIFACTS GLOBALLY */
-
-/* Prevent Google from pushing the entire webpage down */
 html { 
   top: 0px !important; 
   margin-top: 0px !important; 
@@ -87,7 +85,6 @@ body {
   position: static !important; 
 }
 
-/* Annihilate the specific Google Banner frames and obfuscated div containers */
 .goog-te-banner-frame.skiptranslate, 
 .goog-te-gadget-icon,
 .VIpgJd-ZVi9od-aZ2wEe-wOHMyf,
@@ -98,11 +95,39 @@ body {
   visibility: hidden !important;
 }
 
-/* Remove hover tooltips and weird text highlighting */
 .goog-tooltip { display: none !important; }
 .goog-tooltip:hover { display: none !important; }
 .goog-text-highlight { 
   background-color: transparent !important; 
   border: none !important; 
   box-shadow: none !important; 
+}
+
+/* ========================================================= */
+/* 📱 RESPONSIVE MOBILE FIXES (NO REACT REWRITES REQUIRED)   */
+/* ========================================================= */
+
+/* 1. Stop the page from accidentally sliding left and right */
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* 2. The Auto-Scale Trick for Mobile & Tablets */
+@media (max-width: 1024px) {
+  #root {
+    /* Force the app to render as if it is on a 1024px desktop screen */
+    width: 1024px !important; 
+    min-width: 1024px !important;
+    
+    /* Shrink that desktop view down to fit inside the physical mobile screen */
+    transform: scale(calc(100vw / 1024));
+    transform-origin: top left;
+    
+    /* Ensure the scaled content doesn't break scrolling */
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
 }

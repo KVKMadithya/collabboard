@@ -17,7 +17,7 @@ import SearchList from './pages/SearchList';
 import Settings from './pages/Settings';
 import ProgressionMap from './pages/ProgressionMap';
 import Starred from './pages/Starred';
-import Whiteboard from './pages/Whiteboard'; // 👈 NEW: Imported the Real-Time Whiteboard component
+import Whiteboard from './pages/Whiteboard';
 
 // Task Architecture
 import TaskForm from './pages/TaskForm';
@@ -29,7 +29,6 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ProjectProvider } from './context/ProjectContext'; 
 
 // 🛑 SYNCHRONOUS BOOT SEQUENCE
-// Runs instantly on hard refresh to prevent pink flashes
 const initializeGlobalState = () => {
   try {
     const prefs = JSON.parse(localStorage.getItem('collab_preferences') || '{}');
@@ -189,8 +188,6 @@ function App() {
               <Route path="/settings" element={<Settings />} />
               <Route path="/progression" element={<ProgressionMap />} />
               <Route path="/starred" element={<Starred />} />
-              
-              {/* 🛑 NEW ROUTE: Real-Time Whiteboard & Gesture AI */}
               <Route path="/whiteboard" element={<Whiteboard />} />
             </Route>
 
